@@ -482,13 +482,13 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                 if (!token && product.token) {
                     token = await this.getTokenInfo(product.token, chainId);
                 }
-                this.productInfo = {
+                return {
                     ...product,
                     token
                 };
             }
             catch {
-                this.productInfo = null;
+                return null;
             }
         }
         getConfigurators() {
@@ -672,7 +672,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                 if (!this.model.productId) {
                     this.model.productId = await this.model.getProductId(tokenAddress);
                 }
-                await this.model.fetchProductInfo(this.model.productId);
+                this.model.productInfo = await this.model.fetchProductInfo(this.model.productId);
                 this.refreshDappContainer();
                 this.comboRecipient.items = this.model.recipients.map(address => ({
                     label: address,

@@ -199,13 +199,7 @@ declare module "@scom/scom-subscription/model.ts" {
         getTokenInfo(address: string, chainId: number): Promise<ITokenObject>;
         getProductId(nftAddress: string, nftId?: number): Promise<number>;
         fetchProductInfo(productId: number): Promise<{
-            token: {
-                chainId: number;
-                address: string;
-                decimals: number;
-                symbol: string;
-                name: string;
-            };
+            token: ITokenObject;
             productType: BigNumber;
             productId: BigNumber;
             uri: string;

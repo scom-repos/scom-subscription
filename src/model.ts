@@ -442,12 +442,12 @@ export class Model {
             if (!token && product.token) {
                 token = await this.getTokenInfo(product.token, chainId);
             }
-            this.productInfo = {
+            return {
                 ...product,
                 token
             };
         } catch {
-            this.productInfo = null;
+            return null;
         }
     }
 
