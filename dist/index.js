@@ -1147,11 +1147,27 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             this.determineBtnSubmitCaption();
         }
         determineBtnSubmitCaption() {
-            if (!this.model.isTonWalletConnected) {
-                this.btnSubmit.caption = 'Connect Wallet';
+            const paymentMethod = this.model.paymentMethod;
+            if (paymentMethod === scom_social_sdk_2.PaymentMethod.EVM) {
+                if (!this.model.isClientWalletConnected()) {
+                    this.btnSubmit.caption = 'Connect Wallet';
+                    this.btnSubmit.enabled = true;
+                }
+                else if (!this.model.isRpcWalletConnected()) {
+                    this.btnSubmit.caption = 'Switch Network';
+                    this.btnSubmit.enabled = true;
+                }
+                else {
+                    this.btnSubmit.caption = this.isRenewal ? 'Renew Subscription' : 'Subscribe';
+                }
             }
             else {
-                this.btnSubmit.caption = this.isRenewal ? 'Renew Subscription' : 'Subscribe';
+                if (!this.model.isTonWalletConnected) {
+                    this.btnSubmit.caption = 'Connect Wallet';
+                }
+                else {
+                    this.btnSubmit.caption = this.isRenewal ? 'Renew Subscription' : 'Subscribe';
+                }
             }
         }
         _updateEndDate() {
@@ -1416,6 +1432,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                                     this.$render("i-stack", { direction: "vertical", width: "100%", justifyContent: "center", alignItems: "center", margin: { top: '0.5rem' }, gap: 8 },
                                         this.$render("i-button", { id: "btnApprove", width: '100%', caption: "Approve", padding: { top: '1rem', bottom: '1rem', left: '1rem', right: '1rem' }, font: { size: '1rem', color: Theme.colors.primary.contrastText, bold: true }, rightIcon: { visible: false, fill: Theme.colors.primary.contrastText }, background: { color: Theme.background.gradient }, border: { radius: 12 }, visible: false, onClick: this.onApprove }),
                                         this.$render("i-button", { id: 'btnSubmit', width: '100%', caption: 'Subscribe', padding: { top: '1rem', bottom: '1rem', left: '1rem', right: '1rem' }, font: { size: '1rem', color: Theme.colors.primary.contrastText, bold: true }, rightIcon: { visible: false, fill: Theme.colors.primary.contrastText }, background: { color: Theme.background.gradient }, border: { radius: 12 }, enabled: false, onClick: this.onSubmit }))))),
+                        this.$render("i-scom-wallet-modal", { id: "mdWallet", wallets: [] }),
                         this.$render("i-scom-tx-status-modal", { id: "txStatusModal" })))));
         }
     };

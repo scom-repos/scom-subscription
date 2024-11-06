@@ -31,6 +31,9 @@ export default class Module1 extends Module {
     "affiliates": [
       "0xb15E094957c31D6b0d08714015fF85Bec7842635"
     ],
+    "recipients": [
+      "0x9C142a1B9743A8540B59BE676aB9F29B19dC9192"
+    ],
     "paymentMethod": "EVM",
     "wallets": [
       { name: 'metamask' }
@@ -50,7 +53,7 @@ export default class Module1 extends Module {
   async init() {
     super.init();
     const builder = this.subscription.getConfigurators().find((conf: any) => conf.target === 'Builders');
-    builder.setData(this.tonData);
+    builder.setData(this.evmData);
   }
 
   render() {

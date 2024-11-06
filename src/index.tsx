@@ -374,11 +374,26 @@ export default class ScomSubscription extends Module {
     }
 
     private determineBtnSubmitCaption() {
-        if (!this.model.isTonWalletConnected) {
-            this.btnSubmit.caption = 'Connect Wallet';
-        }
-        else {
-            this.btnSubmit.caption = this.isRenewal ? 'Renew Subscription' : 'Subscribe';
+        const paymentMethod = this.model.paymentMethod;
+        if (paymentMethod === PaymentMethod.EVM) {
+            if (!this.model.isClientWalletConnected()) {
+              this.btnSubmit.caption = 'Connect Wallet';
+              this.btnSubmit.enabled = true;
+            }
+            else if (!this.model.isRpcWalletConnected()) {
+              this.btnSubmit.caption = 'Switch Network';
+              this.btnSubmit.enabled = true;
+            }
+            else {
+                this.btnSubmit.caption = this.isRenewal ? 'Renew Subscription' : 'Subscribe';
+            }
+        } else {
+            if (!this.model.isTonWalletConnected) {
+                this.btnSubmit.caption = 'Connect Wallet';
+            }
+            else {
+                this.btnSubmit.caption = this.isRenewal ? 'Renew Subscription' : 'Subscribe';
+            }
         }
     }
 
@@ -808,6 +823,7 @@ export default class ScomSubscription extends Module {
                                 </i-stack>
                             </i-stack>
                         </i-stack>
+                        <i-scom-wallet-modal id="mdWallet" wallets={[]} />
                         <i-scom-tx-status-modal id="txStatusModal" />
                     </i-panel>
                 </i-scom-dapp-container>
