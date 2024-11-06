@@ -15,6 +15,7 @@
         "@scom/scom-token-list": "^0.1.0",
         "@scom/scom-network-list": "^0.1.0",
         "@scom/scom-dapp-container": "^0.1.2",
+        "@scom/scom-wallet-modal": "^0.1.0",
         "@scom/scom-tx-status-modal": "^0.1.0",
         "@scom/scom-social-sdk": "^0.1.60",
         "@scom/scom-product-contract": "^0.1.3"

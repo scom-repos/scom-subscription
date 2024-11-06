@@ -50,7 +50,7 @@ export default class Module1 extends Module {
   async init() {
     super.init();
     const builder = this.subscription.getConfigurators().find((conf: any) => conf.target === 'Builders');
-    builder.setData(this.evmData);
+    builder.setData(this.tonData);
   }
 
   render() {

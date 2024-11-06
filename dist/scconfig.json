@@ -11,8 +11,9 @@
         "@scom/scom-signer",
         "@scom/scom-mqtt",
         "@scom/scom-social-sdk",
-        "@scom/scom-tx-status-modal",
         "@scom/scom-token-list",
-        "@scom/scom-product-contract"
+        "@scom/scom-tx-status-modal",
+        "@scom/scom-product-contract",
+        "@scom/scom-wallet-modal"
     ]
 }

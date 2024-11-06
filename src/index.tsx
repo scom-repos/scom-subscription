@@ -18,13 +18,15 @@ import {
     StackLayout,
     Styles,
 } from '@ijstech/components';
-import { Utils } from '@ijstech/eth-wallet';
+import { BigNumber, IERC20ApprovalAction, Utils } from '@ijstech/eth-wallet';
 import ScomDappContainer from '@scom/scom-dapp-container';
 import { ISubscriptionDiscountRule, PaymentMethod } from '@scom/scom-social-sdk';
+import { ITokenObject } from '@scom/scom-token-list';
 import ScomTxStatusModal from '@scom/scom-tx-status-modal';
 import { inputStyle, linkStyle } from './index.css';
 import { ISubscription } from './interface';
 import { Model } from './model';
+import ScomWalletModal from '@scom/scom-wallet-modal';
 
 const Theme = Styles.Theme.ThemeVars;
 const path = application.currentModuleDir;
@@ -69,10 +71,16 @@ export default class ScomSubscription extends Module {
     private lblNFTContract: Label;
     private lblToken: Label;
     private iconCopyToken: Icon;
+    private btnApprove: Button;
     private btnSubmit: Button;
     private txStatusModal: ScomTxStatusModal;
     private model: Model;
     private _renewalDate: number;
+    private mdWallet: ScomWalletModal;
+    private approvalModelAction: IERC20ApprovalAction;
+    private isApproving: boolean = false;
+    private tokenAmountIn: string = '0';
+    public onSubscribed?: () => void;
 
     private get duration() {
         return Number(this.edtDuration.value) || 0;
@@ -152,6 +160,90 @@ export default class ScomSubscription extends Module {
         if (this.containerDapp?.setData) this.containerDapp.setData(containerData);
     }
 
+    private async initApprovalAction() {
+        if (!this.approvalModelAction) {
+            this.approvalModelAction = await this.model.setApprovalModelAction({
+                sender: this,
+                payAction: async () => {
+                    await this.doSubmitAction();
+                },
+                onToBeApproved: async (token: ITokenObject) => {
+                    this.btnApprove.visible = this.model.isClientWalletConnected() && this.model.isRpcWalletConnected();
+                    this.btnSubmit.visible = !this.btnApprove.visible;
+                    this.btnSubmit.enabled = false;
+                    if (!this.isApproving) {
+                        this.btnApprove.rightIcon.visible = false;
+                        this.btnApprove.caption = 'Approve';
+                    }
+                    this.btnApprove.enabled = true;
+                    this.isApproving = false;
+                },
+                onToBePaid: async (token: ITokenObject) => {
+                    this.btnApprove.visible = false;
+                    this.btnSubmit.visible = true;
+                    this.isApproving = false;
+                    const duration = Number(this.edtDuration.value) || 0;
+                    this.btnSubmit.enabled = new BigNumber(this.tokenAmountIn).gt(0) && Number.isInteger(duration);
+                    this.determineBtnSubmitCaption();
+                },
+                onApproving: async (token: ITokenObject, receipt?: string) => {
+                    this.isApproving = true;
+                    this.btnApprove.rightIcon.spin = true;
+                    this.btnApprove.rightIcon.visible = true;
+                    this.btnApprove.caption = `Approving ${token?.symbol || ''}`;
+                    this.btnSubmit.visible = false;
+                    if (receipt) {
+                        this.showTxStatusModal('success', receipt);
+                    }
+                },
+                onApproved: async (token: ITokenObject) => {
+                    this.btnApprove.rightIcon.visible = false;
+                    this.btnApprove.caption = 'Approve';
+                    this.isApproving = false;
+                    this.btnSubmit.visible = true;
+                    this.btnSubmit.enabled = true;
+                },
+                onApprovingError: async (token: ITokenObject, err: Error) => {
+                    this.showTxStatusModal('error', err);
+                    this.btnApprove.caption = 'Approve';
+                    this.btnApprove.rightIcon.visible = false;
+                    this.isApproving = false;
+                },
+                onPaying: async (receipt?: string) => {
+                    if (receipt) {
+                        this.showTxStatusModal('success', receipt);
+                        this.btnSubmit.enabled = false;
+                        this.btnSubmit.rightIcon.visible = true;
+                    }
+                },
+                onPaid: async (receipt?: any) => {
+                    this.btnSubmit.rightIcon.visible = false;
+                    if (this.txStatusModal) this.txStatusModal.closeModal();
+                },
+                onPayingError: async (err: Error) => {
+                    this.showTxStatusModal('error', err);
+                }
+            });
+            this.updateContractAddress();
+            if (this.model?.token?.address !== Utils.nullAddress && this.tokenAmountIn) {
+                this.approvalModelAction.checkAllowance(this.model.token, this.tokenAmountIn);
+            }
+        }
+    }
+
+    private updateContractAddress() {
+        if (this.approvalModelAction) {
+            let contractAddress: string;
+            if (this.model.referrer) {
+                contractAddress = this.model.getContractAddress('Commission');
+            }
+            else {
+                contractAddress = this.model.getContractAddress('ProductMarketplace');
+            }
+            this.model.approvalModel.spenderAddress = contractAddress;
+        }
+    }
+
     private async updateUIBySetData() {
         this.showLoading();
         this.edtStartDate.value = undefined;
@@ -164,7 +256,8 @@ export default class ScomSubscription extends Module {
     private async updateEVMUI() {
         try {
             await this.model.initWallet();
-            const { chainId, tokenAddress, discountRuleId, discountRules } = this.model.getData();
+            if (this.model.isRpcWalletConnected()) await this.initApprovalAction();
+            const { chainId, tokenAddress } = this.model.getData();
             if (!this.model.productId) {
                 this.model.productId = await this.model.getProductId(tokenAddress);
             }
@@ -314,7 +407,11 @@ export default class ScomSubscription extends Module {
             this.lblDiscount.caption = discountType === 'Percentage' ? `Discount (${discountValue}%)` : 'Discount';
             this.lblDiscountAmount.caption = `-${this.model.formatNumber(discountAmount, 6)} ${currency || ''}`;
         }
+        this.tokenAmountIn = totalAmount.toFixed();
         this.lblOrderTotal.caption = `${this.model.formatNumber(totalAmount, 6)} ${currency || ''}`;
+        if (this.approvalModelAction) {
+          this.approvalModelAction.checkAllowance(this.model.token, this.tokenAmountIn);
+        }
     }
 
     private handleCustomCheckboxChange() {
@@ -415,11 +512,92 @@ export default class ScomSubscription extends Module {
         this.txStatusModal.showModal();
     }
 
-    private onSubmit() {
+    private connectWallet = async () => {
+        if (this.mdWallet) {
+            await application.loadPackage('@scom/scom-wallet-modal', '*');
+            this.mdWallet.networks = this.model.networks;
+            this.mdWallet.wallets = this.model.wallets;
+            this.mdWallet.showModal();
+        }
+    }
+
+    private async onApprove() {
+        this.showTxStatusModal('warning', `Approving`);
+        await this.approvalModelAction.doApproveAction(this.model.token, this.tokenAmountIn);
+    }
+
+    private updateSubmitButton(submitting: boolean) {
+        this.btnSubmit.rightIcon.spin = submitting;
+        this.btnSubmit.rightIcon.visible = submitting;
+    }
+
+    private async doSubmitAction() {
+        const days = this.model.getDurationInDays(this.duration, this.durationUnit, this.edtStartDate.value);
+        if (!this.isRenewal && !this.chkCustomStartDate.checked) {
+            this.edtStartDate.value = moment();
+        }
+        const recipient = (this.comboRecipient.selectedItem as IComboItem)?.value;
+        try {
+            if (!this.edtStartDate.value) {
+                throw new Error('Start Date Required');
+            }
+            const _duration = Number(this.edtDuration.value) || 0;
+            if (!_duration || _duration <= 0 || !Number.isInteger(_duration)) {
+                throw new Error(!this.edtDuration.value ? 'Duration Required' : 'Invalid Duration');
+            }
+            this.updateSubmitButton(true);
+            const startTime = this.edtStartDate.value.unix();
+            const duration = days * 86400;
+            const callback = (error: Error, receipt?: string) => {
+                if (error) {
+                    this.showTxStatusModal('error', error);
+                }
+            };
+            const confirmationCallback = async () => {
+                this.model.productInfo = await this.model.fetchProductInfo(this.model.productId);
+                this.updateSpotsRemaining();
+                if (this.onSubscribed) this.onSubscribed();
+            };
+            if (this.isRenewal) {
+                await this.model.renewSubscription(duration, recipient, callback, confirmationCallback);
+            } else {
+                await this.model.subscribe(startTime, duration, recipient, callback, confirmationCallback);
+            }
+        } catch (error) {
+            this.showTxStatusModal('error', error);
+        }
+        this.updateSubmitButton(false);
+    }
+
+    private async onSubmit() {
         const paymentMethod = this.model.paymentMethod;
-        if (paymentMethod === PaymentMethod.TON && !this.model.isTonWalletConnected) {
-            this.model.connectTonWallet();
-            return;
+        if (paymentMethod === PaymentMethod.EVM) {
+            if (!this.model.isClientWalletConnected()) {
+                this.connectWallet();
+                return;
+            }
+            if (!this.model.isRpcWalletConnected()) {
+                await this.model.switchNetwork(this.model.chainId);
+                return;
+            }
+            this.showTxStatusModal('warning', 'Confirming');
+            this.approvalModelAction.doPayAction();
+        } else if (paymentMethod === PaymentMethod.TON) {
+            if (!this.model.isTonWalletConnected) {
+                this.model.connectTonWallet();
+                return;
+            }
+            try {
+                this.updateSubmitButton(true);
+                const startTime = this.edtStartDate.value.unix();
+                const endTime = moment.unix(startTime).add(this.duration, this.durationUnit).unix();
+                const days = this.model.getDurationInDays(this.duration, this.durationUnit, this.edtStartDate.value);
+                await this.model.tonPayment(startTime, endTime, days);
+                if (this.onSubscribed) this.onSubscribed();
+            } catch (error) {
+                this.showTxStatusModal('error', error);
+            }
+            this.updateSubmitButton(false);
         }
     }
 
@@ -602,6 +780,18 @@ export default class ScomSubscription extends Module {
                                         </i-hstack>
                                     </i-stack>
                                     <i-stack direction="vertical" width="100%" justifyContent="center" alignItems="center" margin={{ top: '0.5rem' }} gap={8}>
+                                        <i-button
+                                            id="btnApprove"
+                                            width='100%'
+                                            caption="Approve"
+                                            padding={{ top: '1rem', bottom: '1rem', left: '1rem', right: '1rem' }}
+                                            font={{ size: '1rem', color: Theme.colors.primary.contrastText, bold: true }}
+                                            rightIcon={{ visible: false, fill: Theme.colors.primary.contrastText }}
+                                            background={{ color: Theme.background.gradient }}
+                                            border={{ radius: 12 }}
+                                            visible={false}
+                                            onClick={this.onApprove}
+                                        ></i-button>
                                         <i-button
                                             id='btnSubmit'
                                             width='100%'

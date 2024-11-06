@@ -2,8 +2,8 @@ import { application, FormatUtils, Module, moment, RequireJS } from "@ijstech/co
 import getNetworkList from "@scom/scom-network-list";
 import { ContractInfoByChainType, ContractType, IExtendedNetwork, INetworkConfig, IProductInfo, ISubscription, IWalletPlugin } from "./interface";
 import configData from './data.json';
-import { ISubscriptionDiscountRule, PaymentMethod } from "@scom/scom-social-sdk";
-import { BigNumber, Constants, IEventBusRegistry, INetwork, Utils, Wallet } from "@ijstech/eth-wallet";
+import { ISubscriptionDiscountRule, Nip19, PaymentMethod, SocialDataManager } from "@scom/scom-social-sdk";
+import { BigNumber, Constants, Erc20, ERC20ApprovalModel, IERC20ApprovalEventOptions, IEventBusRegistry, INetwork, ISendTxEventsOptions, IWallet, Utils, Wallet } from "@ijstech/eth-wallet";
 import { Contracts as ProductContracts } from '@scom/scom-product-contract';
 import { ITokenObject, tokenStore } from "@scom/scom-token-list";
 
@@ -18,6 +18,8 @@ export class Model {
     private networkMap: { [key: number]: IExtendedNetwork };
     private _isRenewal: boolean;
     private _discountApplied: ISubscriptionDiscountRule;
+    private _approvalModel: ERC20ApprovalModel;
+    private _dataManager: SocialDataManager;
     private module: Module;
     private toncore: any;
     private tonConnectUI: any;
@@ -105,11 +107,19 @@ export class Model {
     }
 
     get recipient() {
-      return this._data.recipient ?? '';
+        return this._data.recipient ?? '';
     }
-  
+
     get recipients() {
-      return this._data.recipients || [];
+        return this._data.recipients || [];
+    }
+
+    get referrer() {
+        return this._data.referrer;
+    }
+
+    get approvalModel() {
+        return this._approvalModel;
     }
 
     get productId() {
@@ -150,6 +160,14 @@ export class Model {
 
     set productInfo(info: IProductInfo) {
         this._productInfo = info;
+    }
+    
+    get dataManager() {
+        return this._dataManager || application.store?.mainDataManager;
+    }
+
+    set dataManager(manager: SocialDataManager) {
+        this._dataManager = manager;
     }
 
     constructor(module: Module, moduleDir: string) {
@@ -276,6 +294,20 @@ export class Model {
         return this.rpcWalletId ? Wallet.getRpcWalletInstance(this.rpcWalletId) : null;
     }
 
+    isClientWalletConnected() {
+        const wallet = Wallet.getClientInstance();
+        return wallet.isConnected;
+    }
+
+    isRpcWalletConnected() {
+        const wallet = this.getRpcWallet();
+        return wallet?.isConnected;
+    }
+
+    async switchNetwork(chainId: number) {
+        const wallet = Wallet.getClientInstance();
+        await wallet.switchNetwork(chainId);
+    }
 
     getNetworkInfo(chainId: number) {
         return this.networkMap[chainId];
@@ -292,6 +324,22 @@ export class Model {
             let url = `${network.explorerAddressUrl}${address}`;
             window.open(url);
         }
+    }
+
+    registerSendTxEvents(sendTxEventHandlers: ISendTxEventsOptions) {
+        const wallet = Wallet.getClientInstance();
+        wallet.registerSendTxEvents({
+            transactionHash: (error: Error, receipt?: string) => {
+                if (sendTxEventHandlers.transactionHash) {
+                    sendTxEventHandlers.transactionHash(error, receipt);
+                }
+            },
+            confirmation: (receipt: any) => {
+                if (sendTxEventHandlers.confirmation) {
+                    sendTxEventHandlers.confirmation(receipt);
+                }
+            },
+        })
     }
 
     formatNumber(value: number | string | BigNumber, decimalFigures?: number) {
@@ -399,6 +447,26 @@ export class Model {
         return token;
     }
 
+    async getERC20Amount(wallet: IWallet, tokenAddress: string, decimals: number) {
+        try {
+            let erc20 = new Erc20(wallet, tokenAddress, decimals);
+            return await erc20.balance;
+        } catch {
+            return new BigNumber(0);
+        }
+    }
+
+    async getTokenBalance(wallet: IWallet, token: ITokenObject) {
+        let balance = new BigNumber(0);
+        if (!token) return balance;
+        if (token.address && token.address !== Utils.nullAddress) {
+            balance = await this.getERC20Amount(wallet, token.address, token.decimals);
+        } else {
+            balance = await wallet.balance;
+        }
+        return balance;
+    }
+
     async getProductId(nftAddress: string, nftId?: number) {
         let productId: number;
         try {
@@ -449,6 +517,205 @@ export class Model {
         } catch {
             return null;
         }
+    }
+
+    async getDiscount(productId: number, productPrice: BigNumber, discountRuleId: number) {
+        let basePrice: BigNumber = productPrice;
+        let promotionAddress = this.getContractAddress('Promotion');
+        const wallet = Wallet.getClientInstance();
+        const promotion = new ProductContracts.Promotion(wallet, promotionAddress);
+        const index = await promotion.discountRuleIdToIndex({ param1: productId, param2: discountRuleId });
+        const rule = await promotion.discountRules({ param1: productId, param2: index });
+        if (rule.discountPercentage.gt(0)) {
+            const discount = productPrice.times(rule.discountPercentage).div(100);
+            if (productPrice.gt(discount))
+                basePrice = productPrice.minus(discount);
+        } else if (rule.fixedPrice.gt(0)) {
+            basePrice = rule.fixedPrice;
+        } else {
+            discountRuleId = 0;
+        }
+        return {
+            price: basePrice,
+            id: discountRuleId
+        }
+    }
+
+    async subscribe(startTime: number, duration: number, recipient: string, callback?: any, confirmationCallback?: any) {
+        let commissionAddress = this.getContractAddress('Commission');
+        let productMarketplaceAddress = this.getContractAddress('ProductMarketplace');
+        const wallet = Wallet.getClientInstance();
+        const commission = new ProductContracts.Commission(wallet, commissionAddress);
+        const productMarketplace = new ProductContracts.ProductMarketplace(wallet, productMarketplaceAddress);
+        const product = await productMarketplace.products(this.productId);
+        let basePrice: BigNumber = product.price;
+        let discountRuleId = this.discountApplied?.id ?? 0;
+        if (discountRuleId !== 0) {
+            const discount = await this.getDiscount(this.productId, product.price, discountRuleId);
+            basePrice = discount.price;
+            if (discount.id === 0) discountRuleId = 0;
+        }
+        const amount = product.priceDuration.eq(duration) ? basePrice : basePrice.times(duration).div(product.priceDuration);
+        let tokenInAmount: BigNumber;
+        if (this.referrer) {
+            let campaign = await commission.getCampaign({ campaignId: this.productId, returnArrays: true });
+            const affiliates = (campaign?.affiliates || []).map(a => a.toLowerCase());
+            if (affiliates.includes(this.referrer.toLowerCase())) {
+                const commissionRate = Utils.fromDecimals(campaign.commissionRate, 6);
+                tokenInAmount = new BigNumber(amount).dividedBy(new BigNumber(1).minus(commissionRate)).decimalPlaces(0, BigNumber.ROUND_DOWN);
+            }
+        }
+        let receipt;
+        try {
+            this.registerSendTxEvents({
+                transactionHash: callback,
+                confirmation: confirmationCallback
+            });
+            if (product.token === Utils.nullAddress) {
+                if (!tokenInAmount || tokenInAmount.isZero()) {
+                    receipt = await productMarketplace.subscribe({
+                        to: recipient || wallet.address,
+                        productId: this.productId,
+                        startTime: startTime,
+                        duration: duration,
+                        discountRuleId: discountRuleId
+                    }, amount)
+                } else {
+                    const txData = await productMarketplace.subscribe.txData({
+                        to: recipient || wallet.address,
+                        productId: this.productId,
+                        startTime: startTime,
+                        duration: duration,
+                        discountRuleId: discountRuleId
+                    }, amount);
+                    receipt = await commission.proxyCall({
+                        affiliate: this.referrer,
+                        campaignId: this.productId,
+                        amount: tokenInAmount,
+                        data: txData
+                    }, tokenInAmount);
+                }
+            } else {
+                if (!tokenInAmount || tokenInAmount.isZero()) {
+                    receipt = await productMarketplace.subscribe({
+                        to: recipient || wallet.address,
+                        productId: this.productId,
+                        startTime: startTime,
+                        duration: duration,
+                        discountRuleId: discountRuleId
+                    })
+                } else {
+                    const txData = await productMarketplace.subscribe.txData({
+                        to: recipient || wallet.address,
+                        productId: this.productId,
+                        startTime: startTime,
+                        duration: duration,
+                        discountRuleId: discountRuleId
+                    });
+                    receipt = await commission.proxyCall({
+                        affiliate: this.referrer,
+                        campaignId: this.productId,
+                        amount: tokenInAmount,
+                        data: txData
+                    });
+                }
+            }
+        } catch (err) {
+            console.error(err);
+            throw err;
+        }
+        return receipt;
+    }
+
+    async renewSubscription(duration: number, recipient: string, callback?: any, confirmationCallback?: any) {
+        let productMarketplaceAddress = this.getContractAddress('ProductMarketplace');
+        const wallet = Wallet.getClientInstance();
+        const productMarketplace = new ProductContracts.ProductMarketplace(wallet, productMarketplaceAddress);
+        const product = await productMarketplace.products(this.productId);
+        const subscriptionNFT = new ProductContracts.SubscriptionNFT(wallet, product.nft);
+        let nftId = await subscriptionNFT.tokenOfOwnerByIndex({
+            owner: recipient,
+            index: 0
+        });
+        let basePrice: BigNumber = product.price;
+        let discountRuleId = this.discountApplied?.id ?? 0;
+        if (discountRuleId !== 0) {
+            const discount = await this.getDiscount(this.productId, product.price, discountRuleId);
+            basePrice = discount.price;
+            if (discount.id === 0) discountRuleId = 0;
+        }
+        const amount = product.priceDuration.eq(duration) ? basePrice : basePrice.times(duration).div(product.priceDuration);
+        let receipt;
+        try {
+            this.registerSendTxEvents({
+                transactionHash: callback,
+                confirmation: confirmationCallback
+            });
+            if (product.token === Utils.nullAddress) {
+                receipt = await productMarketplace.renewSubscription({
+                    productId: this.productId,
+                    nftId: nftId,
+                    duration: duration,
+                    discountRuleId: discountRuleId
+                }, amount);
+            } else {
+                receipt = await productMarketplace.renewSubscription({
+                    productId: this.productId,
+                    nftId: nftId,
+                    duration: duration,
+                    discountRuleId: discountRuleId
+                });
+            }
+        } catch (err) {
+            console.error(err);
+            throw err;
+        }
+        return receipt;
+    }
+
+    async constructPayload(msg: string) {
+        const body = this.toncore.beginCell()
+            .storeUint(0, 32) 
+            .storeStringTail(msg) 
+            .endCell();
+        const payload =  body.toBoc().toString("base64");
+        return payload;
+    }
+
+    async tonPayment(startTime: number, endTime: number, days: number) {
+        const { totalAmount } = this.getDiscountAndTotalAmount(days);
+        let subscriptionFee = totalAmount;
+        let subscriptionFeeToAddress = this._data.recipient;
+
+        const creatorPubkey = Nip19.decode(this._data.creatorId).data as string;
+        const comment = `${creatorPubkey}:${this._data.communityId}:${this.dataManager.selfPubkey}:${startTime}:${endTime}`;
+        const payload = await this.constructPayload(comment);
+        //https://ton-connect.github.io/sdk/modules/_tonconnect_ui.html#send-transaction
+        const transaction = {
+            validUntil: Math.floor(Date.now() / 1000) + 60, // 60 sec
+            messages: [
+                {
+                    address: subscriptionFeeToAddress,
+                    amount: subscriptionFee.times(1e9).toFixed(),
+                    payload: payload
+                }
+            ]
+        };
+        
+        const result = await this.tonConnectUI.sendTransaction(transaction);
+        // const txHash = await this.subscriptionModel.getTransactionHash(result.boc);
+        // await this.subscriptionModel.updateCommunitySubscription(this.dataManager, this._data.creatorId, this._data.communityId, startTime, endTime, txHash);
+    }
+
+    async setApprovalModelAction(options: IERC20ApprovalEventOptions) {
+        const approvalOptions = {
+            ...options,
+            spenderAddress: ''
+        };
+        let wallet = this.getRpcWallet();
+        this._approvalModel = new ERC20ApprovalModel(wallet, approvalOptions);
+        let approvalModelAction = this.approvalModel.getAction();
+        return approvalModelAction;
     }
 
     getConfigurators() {
