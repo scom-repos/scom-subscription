@@ -456,6 +456,9 @@ export default class ScomSubscription extends Module {
         this._updateEndDate();
         this._updateDiscount();
         this._updateTotalAmount();
+        if (this.model.isTonWalletConnected) {
+            this.btnSubmit.enabled = this.edtDuration.value && this.duration > 0 && Number.isInteger(this.duration);
+        }
     }
 
     private handleDurationUnitChanged() {
