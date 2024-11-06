@@ -81,6 +81,7 @@ declare module "@scom/scom-subscription/interface.ts" {
 /// <amd-module name="@scom/scom-subscription/data.json.ts" />
 declare module "@scom/scom-subscription/data.json.ts" {
     const _default: {
+        infuraId: string;
         contractInfo: {
             97: {
                 ProductMarketplace: {
@@ -162,6 +163,8 @@ declare module "@scom/scom-subscription/model.ts" {
         get showHeader(): boolean;
         set showHeader(value: boolean);
         get isTonWalletConnected(): boolean;
+        get recipient(): string;
+        get recipients(): string[];
         get productId(): number;
         set productId(value: number);
         get isRenewal(): boolean;
@@ -262,13 +265,11 @@ declare module "@scom/scom-subscription" {
         private edtDuration;
         private comboDurationUnit;
         private lblEndDate;
-        private pnlBasePrice;
         private lblBasePrice;
         private pnlDiscount;
         private lblDiscount;
         private lblDiscountAmount;
         private lblOrderTotal;
-        private iconOrderTotal;
         private pnlDetail;
         private lblSpotsRemaining;
         private btnDetail;
@@ -280,7 +281,6 @@ declare module "@scom/scom-subscription" {
         private btnSubmit;
         private txStatusModal;
         private model;
-        private discountApplied;
         private _renewalDate;
         private get duration();
         private get durationUnit();

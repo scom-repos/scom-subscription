@@ -56,13 +56,11 @@ export default class ScomSubscription extends Module {
     private edtDuration: Input;
     private comboDurationUnit: ComboBox;
     private lblEndDate: Label;
-    private pnlBasePrice: StackLayout;
     private lblBasePrice: Label;
     private pnlDiscount: StackLayout;
     private lblDiscount: Label;
     private lblDiscountAmount: Label;
     private lblOrderTotal: Label;
-    private iconOrderTotal: Icon;
     private pnlDetail: StackLayout;
     private lblSpotsRemaining: Label;
     private btnDetail: Button;
@@ -74,7 +72,6 @@ export default class ScomSubscription extends Module {
     private btnSubmit: Button;
     private txStatusModal: ScomTxStatusModal;
     private model: Model;
-    private discountApplied: ISubscriptionDiscountRule;
     private _renewalDate: number;
 
     private get duration() {
@@ -134,25 +131,25 @@ export default class ScomSubscription extends Module {
     }
 
     private onChainChanged = async () => {
-      await this.refreshDApp();
+        await this.refreshDApp();
     }
-  
+
     private onWalletConnected = async () => {
         await this.refreshDApp();
     }
 
     private refreshDappContainer = () => {
-      const rpcWallet = this.model.getRpcWallet();
-      const { chainId, defaultChainId } = this.model.getData();
-      const _chainId = chainId || rpcWallet?.chainId;
-      const containerData = {
-        defaultChainId: chainId || defaultChainId,
-        wallets: this.model.wallets,
-        networks: _chainId ? [{ chainId: _chainId }] : this.model.networks,
-        showHeader: this.model.showHeader,
-        rpcWalletId: rpcWallet.instanceId
-      }
-      if (this.containerDapp?.setData) this.containerDapp.setData(containerData);
+        const rpcWallet = this.model.getRpcWallet();
+        const { chainId, defaultChainId } = this.model.getData();
+        const _chainId = chainId || rpcWallet?.chainId;
+        const containerData = {
+            defaultChainId: chainId || defaultChainId,
+            wallets: this.model.wallets,
+            networks: _chainId ? [{ chainId: _chainId }] : this.model.networks,
+            showHeader: this.model.showHeader,
+            rpcWalletId: rpcWallet.instanceId
+        }
+        if (this.containerDapp?.setData) this.containerDapp.setData(containerData);
     }
 
     private async updateUIBySetData() {
@@ -173,6 +170,11 @@ export default class ScomSubscription extends Module {
             }
             await this.model.fetchProductInfo(this.model.productId);
             this.refreshDappContainer();
+            this.comboRecipient.items = this.model.recipients.map(address => ({
+                label: address,
+                value: address
+            }));
+            if (this.comboRecipient.items.length) this.comboRecipient.selectedItem = this.comboRecipient.items[0];
             if (this.model.productInfo) {
                 const { token } = this.model.productInfo;
                 this.detailWrapper.visible = true;
@@ -259,7 +261,7 @@ export default class ScomSubscription extends Module {
                 }
                 this.edtDuration.value = rule.minDuration || "1";
                 this.comboDurationUnit.selectedItem = this.model.durationUnits[0];
-                this.discountApplied = rule;
+                this.model.discountApplied = rule;
                 this._updateEndDate();
                 this._updateTotalAmount();
             } else {
@@ -528,7 +530,7 @@ export default class ScomSubscription extends Module {
                                         <i-label caption="End Date" font={{ bold: true, size: '1rem' }}></i-label>
                                         <i-label id="lblEndDate" font={{ size: '1rem' }} />
                                     </i-stack>
-                                    <i-stack id='pnlBasePrice' direction="horizontal" width="100%" alignItems="center" justifyContent="space-between" gap={10}>
+                                    <i-stack direction="horizontal" width="100%" alignItems="center" justifyContent="space-between" gap={10}>
                                         <i-label caption='Base Price' font={{ bold: true, size: '1rem' }}></i-label>
                                         <i-label id='lblBasePrice' font={{ size: '1rem' }}></i-label>
                                     </i-stack>
@@ -555,14 +557,6 @@ export default class ScomSubscription extends Module {
                                     >
                                         <i-stack direction="horizontal" alignItems='center' gap="0.5rem">
                                             <i-label caption='You will pay' font={{ bold: true, size: '1rem' }}></i-label>
-                                            <i-icon
-                                                id="iconOrderTotal"
-                                                width={20}
-                                                height={20}
-                                                name="question-circle"
-                                                fill={Theme.background.modal}
-                                                tooltip={{ content: 'A commission fee of 0% will be applied to the amount you input.' }}
-                                            ></i-icon>
                                         </i-stack>
                                         <i-label id='lblOrderTotal' font={{ size: '1rem' }} caption="0"></i-label>
                                     </i-stack>

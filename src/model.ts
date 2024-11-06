@@ -104,6 +104,14 @@ export class Model {
         return this._isTonWalletConnected;
     }
 
+    get recipient() {
+      return this._data.recipient ?? '';
+    }
+  
+    get recipients() {
+      return this._data.recipients || [];
+    }
+
     get productId() {
         return this._data.productId;
     }
@@ -156,6 +164,9 @@ export class Model {
             };
             return acc;
         }, {});
+        if (configData.infuraId) {
+            this.infuraId = configData.infuraId;
+        }
         if (configData.contractInfo) {
             this.contractInfoByChain = configData.contractInfo;
         }
@@ -211,7 +222,7 @@ export class Model {
     async initWallet() {
         try {
             await Wallet.getClientInstance().init();
-            this.resetRpcWallet();
+            await this.resetRpcWallet();
             const rpcWallet = this.getRpcWallet();
             await rpcWallet.init();
         } catch (err) {
@@ -232,7 +243,7 @@ export class Model {
             return this.rpcWalletId;
         }
         const clientWallet = Wallet.getClientInstance();
-        const networkList: INetwork[] = Object.values(application.store?.networkMap || []);
+        const networkList: INetwork[] = Object.values(application.store?.networkMap || this.networkMap || []);
         const instanceId = clientWallet.initRpcWallet({
             networks: networkList,
             defaultChainId,

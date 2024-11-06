@@ -41,6 +41,7 @@ define("@scom/scom-subscription/data.json.ts", ["require", "exports"], function 
     Object.defineProperty(exports, "__esModule", { value: true });
     ///<amd-module name='@scom/scom-subscription/data.json.ts'/> 
     exports.default = {
+        "infuraId": "adc596bf88b648e2a8902bc9093930c5",
         "contractInfo": {
             97: {
                 "ProductMarketplace": {
@@ -151,6 +152,12 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
         get isTonWalletConnected() {
             return this._isTonWalletConnected;
         }
+        get recipient() {
+            return this._data.recipient ?? '';
+        }
+        get recipients() {
+            return this._data.recipients || [];
+        }
         get productId() {
             return this._data.productId;
         }
@@ -236,6 +243,9 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                 };
                 return acc;
             }, {});
+            if (data_json_1.default.infuraId) {
+                this.infuraId = data_json_1.default.infuraId;
+            }
             if (data_json_1.default.contractInfo) {
                 this.contractInfoByChain = data_json_1.default.contractInfo;
             }
@@ -290,7 +300,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
         async initWallet() {
             try {
                 await eth_wallet_1.Wallet.getClientInstance().init();
-                this.resetRpcWallet();
+                await this.resetRpcWallet();
                 const rpcWallet = this.getRpcWallet();
                 await rpcWallet.init();
             }
@@ -303,7 +313,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                 return this.rpcWalletId;
             }
             const clientWallet = eth_wallet_1.Wallet.getClientInstance();
-            const networkList = Object.values(components_2.application.store?.networkMap || []);
+            const networkList = Object.values(components_2.application.store?.networkMap || this.networkMap || []);
             const instanceId = clientWallet.initRpcWallet({
                 networks: networkList,
                 defaultChainId,
@@ -664,6 +674,12 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                 }
                 await this.model.fetchProductInfo(this.model.productId);
                 this.refreshDappContainer();
+                this.comboRecipient.items = this.model.recipients.map(address => ({
+                    label: address,
+                    value: address
+                }));
+                if (this.comboRecipient.items.length)
+                    this.comboRecipient.selectedItem = this.comboRecipient.items[0];
                 if (this.model.productInfo) {
                     const { token } = this.model.productInfo;
                     this.detailWrapper.visible = true;
@@ -754,7 +770,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                     }
                     this.edtDuration.value = rule.minDuration || "1";
                     this.comboDurationUnit.selectedItem = this.model.durationUnits[0];
-                    this.discountApplied = rule;
+                    this.model.discountApplied = rule;
                     this._updateEndDate();
                     this._updateTotalAmount();
                 }
@@ -932,7 +948,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                                     this.$render("i-stack", { direction: "horizontal", width: "100%", alignItems: "center", justifyContent: "space-between", gap: 10 },
                                         this.$render("i-label", { caption: "End Date", font: { bold: true, size: '1rem' } }),
                                         this.$render("i-label", { id: "lblEndDate", font: { size: '1rem' } })),
-                                    this.$render("i-stack", { id: 'pnlBasePrice', direction: "horizontal", width: "100%", alignItems: "center", justifyContent: "space-between", gap: 10 },
+                                    this.$render("i-stack", { direction: "horizontal", width: "100%", alignItems: "center", justifyContent: "space-between", gap: 10 },
                                         this.$render("i-label", { caption: 'Base Price', font: { bold: true, size: '1rem' } }),
                                         this.$render("i-label", { id: 'lblBasePrice', font: { size: '1rem' } })),
                                     this.$render("i-stack", { id: "pnlDiscount", direction: "horizontal", width: "100%", justifyContent: "space-between", alignItems: "center", gap: "0.5rem", lineHeight: 1.5, visible: false },
@@ -940,8 +956,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                                         this.$render("i-label", { id: "lblDiscountAmount", font: { size: '1rem' } })),
                                     this.$render("i-stack", { width: "100%", direction: "horizontal", justifyContent: "space-between", alignItems: 'center', gap: "0.5rem", lineHeight: 1.5 },
                                         this.$render("i-stack", { direction: "horizontal", alignItems: 'center', gap: "0.5rem" },
-                                            this.$render("i-label", { caption: 'You will pay', font: { bold: true, size: '1rem' } }),
-                                            this.$render("i-icon", { id: "iconOrderTotal", width: 20, height: 20, name: "question-circle", fill: Theme.background.modal, tooltip: { content: 'A commission fee of 0% will be applied to the amount you input.' } })),
+                                            this.$render("i-label", { caption: 'You will pay', font: { bold: true, size: '1rem' } })),
                                         this.$render("i-label", { id: 'lblOrderTotal', font: { size: '1rem' }, caption: "0" })),
                                     this.$render("i-stack", { id: "pnlDetail", direction: "vertical", gap: "0.5rem" },
                                         this.$render("i-stack", { direction: "vertical", width: "100%", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", lineHeight: 1.5 },

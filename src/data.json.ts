@@ -1,4 +1,5 @@
 export default {
+    "infuraId": "adc596bf88b648e2a8902bc9093930c5",
     "contractInfo": {
         97: {
             "ProductMarketplace": {
