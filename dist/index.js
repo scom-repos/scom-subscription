@@ -128,7 +128,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             return this.productInfo?.token;
         }
         get wallets() {
-            return this._data.wallets ?? [];
+            return this._data.wallets ?? this.defaultWallets;
         }
         set wallets(value) {
             this._data.wallets = value;
@@ -205,6 +205,14 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             this.rpcWalletEvents = [];
             this.rpcWalletId = '';
             this.infuraId = '';
+            this.defaultWallets = [
+                {
+                    "name": "metamask"
+                },
+                {
+                    "name": "walletconnect"
+                }
+            ];
             this.contractInfoByChain = {};
             this._isTonWalletConnected = false;
             this.removeRpcWalletEvents = () => {

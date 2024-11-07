@@ -135,6 +135,7 @@ declare module "@scom/scom-subscription/model.ts" {
         private rpcWalletId;
         private infuraId;
         private defaultNetworks;
+        private defaultWallets;
         private contractInfoByChain;
         private networkMap;
         private _isRenewal;

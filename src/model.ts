@@ -14,6 +14,14 @@ export class Model {
     private rpcWalletId: string = '';
     private infuraId: string = '';
     private defaultNetworks: INetworkConfig[];
+    private defaultWallets: IWalletPlugin[] = [
+        {
+            "name": "metamask"
+        },
+        {
+            "name": "walletconnect"
+        }
+    ];
     private contractInfoByChain: ContractInfoByChainType = {};
     private networkMap: { [key: number]: IExtendedNetwork };
     private _isRenewal: boolean;
@@ -75,7 +83,7 @@ export class Model {
     }
 
     get wallets() {
-        return this._data.wallets ?? [];
+        return this._data.wallets ?? this.defaultWallets;
     }
 
     set wallets(value: IWalletPlugin[]) {
