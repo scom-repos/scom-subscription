@@ -1088,12 +1088,12 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                 const productPrice = eth_wallet_2.Utils.fromDecimals(price, token.decimals).toFixed();
                 const days = Math.ceil((priceDuration?.toNumber() || 0) / 86400);
                 const duration = days > 1 ? ` for ${days} days` : ' per day';
-                this.lblBasePrice.caption = `${productPrice ? this.model.formatNumber(productPrice) : ""} ${token?.symbol || ""}${duration}`;
+                this.lblBasePrice.caption = `${productPrice ? this.model.formatNumber(productPrice, 6) : ""} ${token?.symbol || ""}${duration}`;
             }
             else {
                 const { durationInDays, currency, tokenAmount } = this.model.getData();
                 const duration = durationInDays > 1 ? ` for ${durationInDays} days` : ' per day';
-                this.lblBasePrice.caption = `${tokenAmount ? this.model.formatNumber(tokenAmount) : ""} ${currency}${duration}`;
+                this.lblBasePrice.caption = `${tokenAmount ? this.model.formatNumber(tokenAmount, 6) : ""} ${currency}${duration}`;
             }
         }
         async refreshDApp() {
