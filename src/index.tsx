@@ -75,7 +75,6 @@ export default class ScomSubscription extends Module {
     private btnSubmit: Button;
     private txStatusModal: ScomTxStatusModal;
     private model: Model;
-    private _renewalDate: number;
     private mdWallet: ScomWalletModal;
     private approvalModelAction: IERC20ApprovalAction;
     private isApproving: boolean = false;
@@ -98,10 +97,10 @@ export default class ScomSubscription extends Module {
     }
 
     get renewalDate() {
-        return this._renewalDate;
+        return this.model.renewalDate;
     }
     set renewalDate(value: number) {
-        this._renewalDate = value;
+        this.model.renewalDate = value;
         if (this.edtStartDate) {
             this.edtStartDate.value = value > 0 ? moment(value * 1000) : moment();
             this.handleDurationChanged();

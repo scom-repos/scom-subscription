@@ -24,7 +24,6 @@ export class Model {
     ];
     private contractInfoByChain: ContractInfoByChainType = {};
     private networkMap: { [key: number]: IExtendedNetwork };
-    private _isRenewal: boolean;
     private _discountApplied: ISubscriptionDiscountRule;
     private _approvalModel: ERC20ApprovalModel;
     private _dataManager: SocialDataManager;
@@ -139,11 +138,19 @@ export class Model {
     }
 
     get isRenewal() {
-        return this._isRenewal;
+        return this._data.isRenewal;
     }
 
     set isRenewal(value: boolean) {
-        this._isRenewal = value;
+        this._data.isRenewal = value;
+    }
+
+    get renewalDate() {
+        return this._data.renewalDate;
+    }
+
+    set renewalDate(value: number) {
+        this._data.renewalDate = value;
     }
 
     get discountApplied() {

@@ -63,6 +63,8 @@ declare module "@scom/scom-subscription/interface.ts" {
         recipients?: string[];
         discountRuleId?: number;
         referrer?: string;
+        isRenewal?: boolean;
+        renewalDate?: number;
         defaultChainId?: number;
         wallets?: IWalletPlugin[];
         networks?: any[];
@@ -138,7 +140,6 @@ declare module "@scom/scom-subscription/model.ts" {
         private defaultWallets;
         private contractInfoByChain;
         private networkMap;
-        private _isRenewal;
         private _discountApplied;
         private _approvalModel;
         private _dataManager;
@@ -174,6 +175,8 @@ declare module "@scom/scom-subscription/model.ts" {
         set productId(value: number);
         get isRenewal(): boolean;
         set isRenewal(value: boolean);
+        get renewalDate(): number;
+        set renewalDate(value: number);
         get discountApplied(): ISubscriptionDiscountRule;
         set discountApplied(value: ISubscriptionDiscountRule);
         get discountRuleId(): number;
@@ -298,7 +301,6 @@ declare module "@scom/scom-subscription" {
         private btnSubmit;
         private txStatusModal;
         private model;
-        private _renewalDate;
         private mdWallet;
         private approvalModelAction;
         private isApproving;

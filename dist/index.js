@@ -171,10 +171,16 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             this._data.productId = value;
         }
         get isRenewal() {
-            return this._isRenewal;
+            return this._data.isRenewal;
         }
         set isRenewal(value) {
-            this._isRenewal = value;
+            this._data.isRenewal = value;
+        }
+        get renewalDate() {
+            return this._data.renewalDate;
+        }
+        set renewalDate(value) {
+            this._data.renewalDate = value;
         }
         get discountApplied() {
             return this._discountApplied;
@@ -904,10 +910,10 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             this.model.isRenewal = value;
         }
         get renewalDate() {
-            return this._renewalDate;
+            return this.model.renewalDate;
         }
         set renewalDate(value) {
-            this._renewalDate = value;
+            this.model.renewalDate = value;
             if (this.edtStartDate) {
                 this.edtStartDate.value = value > 0 ? (0, components_3.moment)(value * 1000) : (0, components_3.moment)();
                 this.handleDurationChanged();

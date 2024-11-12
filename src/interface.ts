@@ -59,6 +59,8 @@ export interface ISubscription {
     recipients?: string[];
     discountRuleId?: number;
     referrer?: string;
+    isRenewal?: boolean;
+    renewalDate?: number;
     defaultChainId?: number;
     wallets?: IWalletPlugin[];
     networks?: any[];
