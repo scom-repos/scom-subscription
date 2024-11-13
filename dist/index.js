@@ -681,12 +681,16 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             }
             return receipt;
         }
-        async renewSubscription(duration, recipient, callback, confirmationCallback) {
+        async renewSubscription(startTime, duration, recipient, callback, confirmationCallback) {
             let productMarketplaceAddress = this.getContractAddress('ProductMarketplace');
             const wallet = eth_wallet_1.Wallet.getClientInstance();
             const productMarketplace = new scom_product_contract_1.Contracts.ProductMarketplace(wallet, productMarketplaceAddress);
             const product = await productMarketplace.products(this.productId);
             const subscriptionNFT = new scom_product_contract_1.Contracts.SubscriptionNFT(wallet, product.nft);
+            let nftBalance = await subscriptionNFT.balanceOf(recipient);
+            if (nftBalance.eq(0)) {
+                return this.subscribe(startTime, duration, recipient, callback, confirmationCallback);
+            }
             let nftId = await subscriptionNFT.tokenOfOwnerByIndex({
                 owner: recipient,
                 index: 0
@@ -1330,7 +1334,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                         this.onSubscribed();
                 };
                 if (this.isRenewal) {
-                    await this.model.renewSubscription(duration, recipient, callback, confirmationCallback);
+                    await this.model.renewSubscription(startTime, duration, recipient, callback, confirmationCallback);
                 }
                 else {
                     await this.model.subscribe(startTime, duration, recipient, callback, confirmationCallback);

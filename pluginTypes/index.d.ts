@@ -233,7 +233,7 @@ declare module "@scom/scom-subscription/model.ts" {
             id: number;
         }>;
         subscribe(startTime: number, duration: number, recipient: string, callback?: any, confirmationCallback?: any): Promise<any>;
-        renewSubscription(duration: number, recipient: string, callback?: any, confirmationCallback?: any): Promise<any>;
+        renewSubscription(startTime: number, duration: number, recipient: string, callback?: any, confirmationCallback?: any): Promise<any>;
         constructPayload(msg: string): Promise<any>;
         tonPayment(startTime: number, endTime: number, days: number): Promise<void>;
         setApprovalModelAction(options: IERC20ApprovalEventOptions): Promise<import("@ijstech/eth-wallet").IERC20ApprovalAction>;

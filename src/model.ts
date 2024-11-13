@@ -645,12 +645,16 @@ export class Model {
         return receipt;
     }
 
-    async renewSubscription(duration: number, recipient: string, callback?: any, confirmationCallback?: any) {
+    async renewSubscription(startTime: number, duration: number, recipient: string, callback?: any, confirmationCallback?: any) {
         let productMarketplaceAddress = this.getContractAddress('ProductMarketplace');
         const wallet = Wallet.getClientInstance();
         const productMarketplace = new ProductContracts.ProductMarketplace(wallet, productMarketplaceAddress);
         const product = await productMarketplace.products(this.productId);
         const subscriptionNFT = new ProductContracts.SubscriptionNFT(wallet, product.nft);
+        let nftBalance = await subscriptionNFT.balanceOf(recipient);
+        if (nftBalance.eq(0)) {
+            return this.subscribe(startTime, duration, recipient, callback, confirmationCallback);
+        }
         let nftId = await subscriptionNFT.tokenOfOwnerByIndex({
             owner: recipient,
             index: 0
