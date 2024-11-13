@@ -19,7 +19,7 @@
     "scripts": {
         "cp:libs": "rm -rf ref && mkdir ref && cp ../package.json ref/package.json && cp -r ../dist ref/dist && cp -r ../pluginTypes ref/pluginTypes && cp -r ../pluginTypes ref/types",
         "build": "npm run cp:libs && rm -rf dist && npx @ijstech/compiler",
-        "serve": "npx @ijstech/cli serve 8032",
+        "serve": "npx @ijstech/cli serve 8080",
         "test": "npm run build && npm run serve"
     }
 }
