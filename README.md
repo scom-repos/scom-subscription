@@ -14,20 +14,16 @@ The `i-scom-subscription` widget is a subscription management tool designed to i
 
 ## Installation
 
-### Step 1: Install Packages
-
-To install the necessary packages, run the following command:
-
-## Step 1: Install packages
+### Step 1: Install packages
 ```sh
 docker-compose up install
 ```
-## Step 2: Build and bundle library
+### Step 2: Build and bundle library
 ```sh
 docker-compose up build
 ```
 
-## Step 3: Run test
+### Step 3: Run test
 ```sh
 docker-compose up -d test
 ```
