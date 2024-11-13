@@ -576,7 +576,7 @@ export default class ScomSubscription extends Module {
                 if (this.onSubscribed) this.onSubscribed();
             };
             if (this.isRenewal) {
-                await this.model.renewSubscription(duration, recipient, callback, confirmationCallback);
+                await this.model.renewSubscription(startTime, duration, recipient, callback, confirmationCallback);
             } else {
                 await this.model.subscribe(startTime, duration, recipient, callback, confirmationCallback);
             }
