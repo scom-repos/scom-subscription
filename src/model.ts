@@ -226,10 +226,12 @@ export class Model {
     initTonWallet() {
         try {
             let UI = window['TON_CONNECT_UI'];
-            this.tonConnectUI = new UI.TonConnectUI({
-                manifestUrl: 'https://ton.noto.fan/tonconnect/manifest.json',
-                buttonRootId: 'pnlHeader'
-            });
+            if (!this.tonConnectUI) {
+                this.tonConnectUI = new UI.TonConnectUI({
+                    manifestUrl: 'https://ton.noto.fan/tonconnect/manifest.json',
+                    buttonRootId: 'pnlHeader'
+                });
+            }
             this.tonConnectUI.connectionRestored.then(async (restored: boolean) => {
                 this._isTonWalletConnected = this.tonConnectUI.connected;
                 if (this.onTonWalletStatusChanged) this.onTonWalletStatusChanged(this._isTonWalletConnected);
@@ -239,7 +241,8 @@ export class Model {
                 if (this.onTonWalletStatusChanged) this.onTonWalletStatusChanged(this._isTonWalletConnected);
             });
         } catch (err) {
-            alert(err)
+            // alert(err)
+            console.log(err);
         }
     }
 

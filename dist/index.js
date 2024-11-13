@@ -296,10 +296,12 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
         initTonWallet() {
             try {
                 let UI = window['TON_CONNECT_UI'];
-                this.tonConnectUI = new UI.TonConnectUI({
-                    manifestUrl: 'https://ton.noto.fan/tonconnect/manifest.json',
-                    buttonRootId: 'pnlHeader'
-                });
+                if (!this.tonConnectUI) {
+                    this.tonConnectUI = new UI.TonConnectUI({
+                        manifestUrl: 'https://ton.noto.fan/tonconnect/manifest.json',
+                        buttonRootId: 'pnlHeader'
+                    });
+                }
                 this.tonConnectUI.connectionRestored.then(async (restored) => {
                     this._isTonWalletConnected = this.tonConnectUI.connected;
                     if (this.onTonWalletStatusChanged)
@@ -312,7 +314,8 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                 });
             }
             catch (err) {
-                alert(err);
+                // alert(err)
+                console.log(err);
             }
         }
         async connectTonWallet() {
