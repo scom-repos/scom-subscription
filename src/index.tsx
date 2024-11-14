@@ -662,13 +662,14 @@ export default class ScomSubscription extends Module {
                             <i-stack direction="vertical" width="100%" maxWidth={600} gap='0.5rem'>
                                 <i-stack id="pnlBody" direction="vertical" gap="0.5rem">
                                     <i-stack id='pnlRecipient' width='100%' direction="horizontal" alignItems="center" justifyContent="space-between" gap={10} visible={false}>
-                                        <i-label caption='Wallet Address to Receive NFT' stack={{ shrink: '0' }} font={{ bold: true, size: '1rem' }}></i-label>
+                                        <i-label caption='Wallet Address to Receive NFT' font={{ bold: true, size: '1rem' }}></i-label>
                                         <i-combo-box
                                             id="comboRecipient"
                                             height={36}
                                             width="100%"
                                             icon={{ width: 14, height: 14, name: 'angle-down', fill: Theme.divider }}
                                             border={{ width: 1, style: 'solid', color: Theme.divider, radius: 5 }}
+                                            stack={{ basis: '50%' }}
                                         ></i-combo-box>
                                     </i-stack>
                                     <i-stack direction="horizontal" width="100%" alignItems="center" justifyContent="space-between" gap={10}>
@@ -677,7 +678,7 @@ export default class ScomSubscription extends Module {
                                     </i-stack>
                                     <i-stack id="pnlCustomStartDate" direction="horizontal" width="100%" alignItems="center" justifyContent="space-between" gap={10} visible={false}>
                                         <i-checkbox id="chkCustomStartDate" height="auto" caption="Custom" onChanged={this.handleCustomCheckboxChange}></i-checkbox>
-                                        <i-panel width="50%">
+                                        <i-panel stack={{ basis: '50%' }}>
                                             <i-datepicker
                                                 id="edtStartDate"
                                                 height={36}
@@ -694,7 +695,7 @@ export default class ScomSubscription extends Module {
                                     </i-stack>
                                     <i-stack direction="horizontal" width="100%" alignItems="center" justifyContent="space-between" gap={10}>
                                         <i-label caption="Duration" font={{ bold: true, size: '1rem' }}></i-label>
-                                        <i-stack direction="horizontal" width="50%" alignItems="center" gap="0.5rem">
+                                        <i-stack direction="horizontal" alignItems="center" stack={{ basis: '50%' }} gap="0.5rem">
                                             <i-panel width="50%">
                                                 <i-input
                                                     id="edtDuration"
