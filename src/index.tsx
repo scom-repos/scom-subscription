@@ -140,11 +140,13 @@ export default class ScomSubscription extends Module {
     }
 
     private onChainChanged = async () => {
-        await this.refreshDApp();
+        if (this.model.isRpcWalletConnected()) await this.initApprovalAction();
+        this.determineBtnSubmitCaption();
     }
 
     private onWalletConnected = async () => {
-        await this.refreshDApp();
+        if (this.model.isRpcWalletConnected()) await this.initApprovalAction();
+        this.determineBtnSubmitCaption();
     }
 
     private refreshDappContainer = () => {
@@ -364,6 +366,9 @@ export default class ScomSubscription extends Module {
                 this.model.discountApplied = rule;
                 this._updateEndDate();
                 this._updateTotalAmount();
+                if (this.model.isTonWalletConnected) {
+                    this.btnSubmit.enabled = this.edtDuration.value && this.duration > 0 && Number.isInteger(this.duration);
+                }
             } else {
                 this.edtDuration.value = durationInDays || "";
                 this.handleDurationChanged();
