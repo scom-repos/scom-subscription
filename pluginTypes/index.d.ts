@@ -290,9 +290,11 @@ declare module "@scom/scom-subscription" {
         private lblDiscountAmount;
         private lblOrderTotal;
         private pnlDetail;
+        private pnlSpotsRemaining;
         private lblSpotsRemaining;
         private btnDetail;
         private detailWrapper;
+        private lblRemaining;
         private lblMarketplaceContract;
         private lblNFTContract;
         private lblToken;

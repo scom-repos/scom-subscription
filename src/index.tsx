@@ -64,9 +64,11 @@ export default class ScomSubscription extends Module {
     private lblDiscountAmount: Label;
     private lblOrderTotal: Label;
     private pnlDetail: StackLayout;
+    private pnlSpotsRemaining: StackLayout;
     private lblSpotsRemaining: Label;
     private btnDetail: Button;
-    private detailWrapper: HStack;
+    private detailWrapper: StackLayout;
+    private lblRemaining: Label;
     private lblMarketplaceContract: Label;
     private lblNFTContract: Label;
     private lblToken: Label;
@@ -298,9 +300,15 @@ export default class ScomSubscription extends Module {
 
     private updateSpotsRemaining() {
         if (this.model.productId >= 0) {
-            this.lblSpotsRemaining.caption = `&#128293; Hurry! Only [ ${this.model.formatNumber(this.model.productInfo.quantity, 0)} NFTs Left ] &#128293;`;
+            const remaining = this.model.formatNumber(this.model.productInfo.quantity, 0);
+            this.lblRemaining.caption = remaining;
+            this.lblSpotsRemaining.caption = this.model.productInfo.quantity.gt(0) ? `&#128293; Hurry! Only [ ${remaining} NFTs Left ] &#128293;` : 'SOLD OUT';
+            this.lblSpotsRemaining.font = { bold: true, size: '1rem', color: this.model.productInfo.quantity.gt(0) ? Theme.text.primary : Theme.colors.error.dark };
+            this.pnlSpotsRemaining.visible = this.model.productInfo.quantity.lte(50);
         } else {
+            this.lblRemaining.caption = '';
             this.lblSpotsRemaining.caption = '';
+            this.pnlSpotsRemaining.visible = false;
         }
     }
 
@@ -757,7 +765,7 @@ export default class ScomSubscription extends Module {
                                         <i-label id='lblOrderTotal' font={{ size: '1rem' }} caption="0"></i-label>
                                     </i-stack>
                                     <i-stack id="pnlDetail" direction="vertical" gap="0.5rem">
-                                        <i-stack direction="vertical" width="100%" alignItems="center" justifyContent="space-between" gap="0.5rem" lineHeight={1.5}>
+                                        <i-stack id="pnlSpotsRemaining" direction="vertical" width="100%" alignItems="center" justifyContent="space-between" gap="0.5rem" lineHeight={1.5}>
                                             <i-label id="lblSpotsRemaining" font={{ bold: true, size: '1rem' }} />
                                         </i-stack>
                                         <i-button
@@ -773,7 +781,11 @@ export default class ScomSubscription extends Module {
                                             onClick={this.onToggleDetail}
                                             visible={false}
                                         />
-                                        <i-hstack id="detailWrapper" horizontalAlignment="space-between" gap={10} visible={false} wrap="wrap">
+                                        <i-stack id="detailWrapper" direction="vertical" gap={10} visible={false}>
+                                            <i-stack width="100%" direction="horizontal" justifyContent="space-between" gap="0.5rem" lineHeight={1.5}>
+                                                <i-label caption="Remaining" font={{ bold: true, size: '1rem' }} />
+                                                <i-label id='lblRemaining' font={{ size: '1rem' }}></i-label>
+                                            </i-stack>
                                             <i-hstack width="100%" justifyContent="space-between" gap="0.5rem" lineHeight={1.5}>
                                                 <i-label caption="Marketplace Contract Address" font={{ bold: true, size: '1rem' }} />
                                                 <i-hstack gap="0.25rem" verticalAlignment="center" maxWidth="calc(100% - 75px)">
@@ -795,7 +807,7 @@ export default class ScomSubscription extends Module {
                                                     <i-icon id="iconCopyToken" visible={false} fill={Theme.text.primary} name="copy" width={16} height={16} onClick={this.onCopyToken} cursor="pointer" />
                                                 </i-hstack>
                                             </i-hstack>
-                                        </i-hstack>
+                                        </i-stack>
                                     </i-stack>
                                     <i-stack direction="vertical" width="100%" justifyContent="center" alignItems="center" margin={{ top: '0.5rem' }} gap={8}>
                                         <i-button

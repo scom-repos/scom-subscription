@@ -1089,10 +1089,16 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
         }
         updateSpotsRemaining() {
             if (this.model.productId >= 0) {
-                this.lblSpotsRemaining.caption = `&#128293; Hurry! Only [ ${this.model.formatNumber(this.model.productInfo.quantity, 0)} NFTs Left ] &#128293;`;
+                const remaining = this.model.formatNumber(this.model.productInfo.quantity, 0);
+                this.lblRemaining.caption = remaining;
+                this.lblSpotsRemaining.caption = this.model.productInfo.quantity.gt(0) ? `&#128293; Hurry! Only [ ${remaining} NFTs Left ] &#128293;` : 'SOLD OUT';
+                this.lblSpotsRemaining.font = { bold: true, size: '1rem', color: this.model.productInfo.quantity.gt(0) ? Theme.text.primary : Theme.colors.error.dark };
+                this.pnlSpotsRemaining.visible = this.model.productInfo.quantity.lte(50);
             }
             else {
+                this.lblRemaining.caption = '';
                 this.lblSpotsRemaining.caption = '';
+                this.pnlSpotsRemaining.visible = false;
             }
         }
         updateBasePrice(isEVM) {
@@ -1434,10 +1440,13 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                                             this.$render("i-label", { caption: 'You will pay', font: { bold: true, size: '1rem' } })),
                                         this.$render("i-label", { id: 'lblOrderTotal', font: { size: '1rem' }, caption: "0" })),
                                     this.$render("i-stack", { id: "pnlDetail", direction: "vertical", gap: "0.5rem" },
-                                        this.$render("i-stack", { direction: "vertical", width: "100%", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", lineHeight: 1.5 },
+                                        this.$render("i-stack", { id: "pnlSpotsRemaining", direction: "vertical", width: "100%", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", lineHeight: 1.5 },
                                             this.$render("i-label", { id: "lblSpotsRemaining", font: { bold: true, size: '1rem' } })),
                                         this.$render("i-button", { id: "btnDetail", caption: "More Information", rightIcon: { width: 10, height: 16, margin: { left: 5 }, fill: Theme.text.primary, name: 'caret-down' }, background: { color: 'transparent' }, border: { width: 1, style: 'solid', color: Theme.text.primary, radius: 8 }, width: 280, maxWidth: "100%", height: 36, margin: { top: 4, bottom: 16, left: 'auto', right: 'auto' }, onClick: this.onToggleDetail, visible: false }),
-                                        this.$render("i-hstack", { id: "detailWrapper", horizontalAlignment: "space-between", gap: 10, visible: false, wrap: "wrap" },
+                                        this.$render("i-stack", { id: "detailWrapper", direction: "vertical", gap: 10, visible: false },
+                                            this.$render("i-stack", { width: "100%", direction: "horizontal", justifyContent: "space-between", gap: "0.5rem", lineHeight: 1.5 },
+                                                this.$render("i-label", { caption: "Remaining", font: { bold: true, size: '1rem' } }),
+                                                this.$render("i-label", { id: 'lblRemaining', font: { size: '1rem' } })),
                                             this.$render("i-hstack", { width: "100%", justifyContent: "space-between", gap: "0.5rem", lineHeight: 1.5 },
                                                 this.$render("i-label", { caption: "Marketplace Contract Address", font: { bold: true, size: '1rem' } }),
                                                 this.$render("i-hstack", { gap: "0.25rem", verticalAlignment: "center", maxWidth: "calc(100% - 75px)" },
