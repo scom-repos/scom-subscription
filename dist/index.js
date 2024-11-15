@@ -860,10 +860,14 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             this.isApproving = false;
             this.tokenAmountIn = '0';
             this.onChainChanged = async () => {
-                await this.refreshDApp();
+                if (this.model.isRpcWalletConnected())
+                    await this.initApprovalAction();
+                this.determineBtnSubmitCaption();
             };
             this.onWalletConnected = async () => {
-                await this.refreshDApp();
+                if (this.model.isRpcWalletConnected())
+                    await this.initApprovalAction();
+                this.determineBtnSubmitCaption();
             };
             this.refreshDappContainer = () => {
                 const rpcWallet = this.model.getRpcWallet();
@@ -1156,6 +1160,9 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                     this.model.discountApplied = rule;
                     this._updateEndDate();
                     this._updateTotalAmount();
+                    if (this.model.isTonWalletConnected) {
+                        this.btnSubmit.enabled = this.edtDuration.value && this.duration > 0 && Number.isInteger(this.duration);
+                    }
                 }
                 else {
                     this.edtDuration.value = durationInDays || "";
