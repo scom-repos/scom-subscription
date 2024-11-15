@@ -588,11 +588,8 @@ export default class ScomSubscription extends Module {
                 this.updateSpotsRemaining();
                 if (this.onSubscribed) this.onSubscribed();
             };
-            if (this.isRenewal) {
-                await this.model.renewSubscription(startTime, duration, recipient, callback, confirmationCallback);
-            } else {
-                await this.model.subscribe(startTime, duration, recipient, callback, confirmationCallback);
-            }
+            const action = await this.model.getSubscriptionAction(recipient);
+            await action(startTime, duration, recipient, callback, confirmationCallback);
         } catch (error) {
             this.showTxStatusModal('error', error);
         }
