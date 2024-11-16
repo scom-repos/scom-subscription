@@ -591,22 +591,32 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                 id: discountRuleId
             };
         }
+        async getSubscriptionAction(recipient) {
+            const wallet = eth_wallet_1.Wallet.getClientInstance();
+            const subscriptionNFT = new scom_product_contract_1.Contracts.SubscriptionNFT(wallet, this.productInfo.nft);
+            let nftBalance = await subscriptionNFT.balanceOf(recipient);
+            if (nftBalance.eq(0)) {
+                return this.subscribe.bind(this);
+            }
+            else {
+                return this.renewSubscription.bind(this);
+            }
+        }
         async subscribe(startTime, duration, recipient, callback, confirmationCallback) {
             let commissionAddress = this.getContractAddress('Commission');
             let productMarketplaceAddress = this.getContractAddress('ProductMarketplace');
             const wallet = eth_wallet_1.Wallet.getClientInstance();
             const commission = new scom_product_contract_1.Contracts.Commission(wallet, commissionAddress);
             const productMarketplace = new scom_product_contract_1.Contracts.ProductMarketplace(wallet, productMarketplaceAddress);
-            const product = await productMarketplace.products(this.productId);
-            let basePrice = product.price;
+            let basePrice = this.productInfo.price;
             let discountRuleId = this.discountApplied?.id ?? 0;
             if (discountRuleId !== 0) {
-                const discount = await this.getDiscount(this.productId, product.price, discountRuleId);
+                const discount = await this.getDiscount(this.productId, this.productInfo.price, discountRuleId);
                 basePrice = discount.price;
                 if (discount.id === 0)
                     discountRuleId = 0;
             }
-            const amount = product.priceDuration.eq(duration) ? basePrice : basePrice.times(duration).div(product.priceDuration);
+            const amount = this.productInfo.priceDuration.eq(duration) ? basePrice : basePrice.times(duration).div(this.productInfo.priceDuration);
             let tokenInAmount;
             if (this.referrer) {
                 let campaign = await commission.getCampaign({ campaignId: this.productId, returnArrays: true });
@@ -622,7 +632,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                     transactionHash: callback,
                     confirmation: confirmationCallback
                 });
-                if (product.token === eth_wallet_1.Utils.nullAddress) {
+                if (this.productInfo.token.address === eth_wallet_1.Utils.nullAddress) {
                     if (!tokenInAmount || tokenInAmount.isZero()) {
                         receipt = await productMarketplace.subscribe({
                             to: recipient || wallet.address,
@@ -685,32 +695,27 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             let productMarketplaceAddress = this.getContractAddress('ProductMarketplace');
             const wallet = eth_wallet_1.Wallet.getClientInstance();
             const productMarketplace = new scom_product_contract_1.Contracts.ProductMarketplace(wallet, productMarketplaceAddress);
-            const product = await productMarketplace.products(this.productId);
-            const subscriptionNFT = new scom_product_contract_1.Contracts.SubscriptionNFT(wallet, product.nft);
-            let nftBalance = await subscriptionNFT.balanceOf(recipient);
-            if (nftBalance.eq(0)) {
-                return this.subscribe(startTime, duration, recipient, callback, confirmationCallback);
-            }
+            const subscriptionNFT = new scom_product_contract_1.Contracts.SubscriptionNFT(wallet, this.productInfo.nft);
             let nftId = await subscriptionNFT.tokenOfOwnerByIndex({
                 owner: recipient,
                 index: 0
             });
-            let basePrice = product.price;
+            let basePrice = this.productInfo.price;
             let discountRuleId = this.discountApplied?.id ?? 0;
             if (discountRuleId !== 0) {
-                const discount = await this.getDiscount(this.productId, product.price, discountRuleId);
+                const discount = await this.getDiscount(this.productId, this.productInfo.price, discountRuleId);
                 basePrice = discount.price;
                 if (discount.id === 0)
                     discountRuleId = 0;
             }
-            const amount = product.priceDuration.eq(duration) ? basePrice : basePrice.times(duration).div(product.priceDuration);
+            const amount = this.productInfo.priceDuration.eq(duration) ? basePrice : basePrice.times(duration).div(this.productInfo.priceDuration);
             let receipt;
             try {
                 this.registerSendTxEvents({
                     transactionHash: callback,
                     confirmation: confirmationCallback
                 });
-                if (product.token === eth_wallet_1.Utils.nullAddress) {
+                if (this.productInfo.token.address === eth_wallet_1.Utils.nullAddress) {
                     receipt = await productMarketplace.renewSubscription({
                         productId: this.productId,
                         nftId: nftId,
@@ -1346,12 +1351,8 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                     if (this.onSubscribed)
                         this.onSubscribed();
                 };
-                if (this.isRenewal) {
-                    await this.model.renewSubscription(startTime, duration, recipient, callback, confirmationCallback);
-                }
-                else {
-                    await this.model.subscribe(startTime, duration, recipient, callback, confirmationCallback);
-                }
+                const action = await this.model.getSubscriptionAction(recipient);
+                await action(startTime, duration, recipient, callback, confirmationCallback);
             }
             catch (error) {
                 this.showTxStatusModal('error', error);

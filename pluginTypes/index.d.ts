@@ -232,6 +232,7 @@ declare module "@scom/scom-subscription/model.ts" {
             price: BigNumber;
             id: number;
         }>;
+        getSubscriptionAction(recipient: string): Promise<any>;
         subscribe(startTime: number, duration: number, recipient: string, callback?: any, confirmationCallback?: any): Promise<any>;
         renewSubscription(startTime: number, duration: number, recipient: string, callback?: any, confirmationCallback?: any): Promise<any>;
         constructPayload(msg: string): Promise<any>;

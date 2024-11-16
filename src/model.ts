@@ -559,21 +559,32 @@ export class Model {
         }
     }
 
+    async getSubscriptionAction(recipient: string) {
+        const wallet = Wallet.getClientInstance();
+        const subscriptionNFT = new ProductContracts.SubscriptionNFT(wallet, this.productInfo.nft);
+        let nftBalance = await subscriptionNFT.balanceOf(recipient);
+        if (nftBalance.eq(0)) {
+            return this.subscribe.bind(this);
+        }
+        else {
+            return this.renewSubscription.bind(this);
+        }
+    }
+    
     async subscribe(startTime: number, duration: number, recipient: string, callback?: any, confirmationCallback?: any) {
         let commissionAddress = this.getContractAddress('Commission');
         let productMarketplaceAddress = this.getContractAddress('ProductMarketplace');
         const wallet = Wallet.getClientInstance();
         const commission = new ProductContracts.Commission(wallet, commissionAddress);
         const productMarketplace = new ProductContracts.ProductMarketplace(wallet, productMarketplaceAddress);
-        const product = await productMarketplace.products(this.productId);
-        let basePrice: BigNumber = product.price;
+        let basePrice: BigNumber = this.productInfo.price;
         let discountRuleId = this.discountApplied?.id ?? 0;
         if (discountRuleId !== 0) {
-            const discount = await this.getDiscount(this.productId, product.price, discountRuleId);
+            const discount = await this.getDiscount(this.productId, this.productInfo.price, discountRuleId);
             basePrice = discount.price;
             if (discount.id === 0) discountRuleId = 0;
         }
-        const amount = product.priceDuration.eq(duration) ? basePrice : basePrice.times(duration).div(product.priceDuration);
+        const amount = this.productInfo.priceDuration.eq(duration) ? basePrice : basePrice.times(duration).div(this.productInfo.priceDuration);
         let tokenInAmount: BigNumber;
         if (this.referrer) {
             let campaign = await commission.getCampaign({ campaignId: this.productId, returnArrays: true });
@@ -589,7 +600,7 @@ export class Model {
                 transactionHash: callback,
                 confirmation: confirmationCallback
             });
-            if (product.token === Utils.nullAddress) {
+            if (this.productInfo.token.address === Utils.nullAddress) {
                 if (!tokenInAmount || tokenInAmount.isZero()) {
                     receipt = await productMarketplace.subscribe({
                         to: recipient || wallet.address,
@@ -649,31 +660,26 @@ export class Model {
         let productMarketplaceAddress = this.getContractAddress('ProductMarketplace');
         const wallet = Wallet.getClientInstance();
         const productMarketplace = new ProductContracts.ProductMarketplace(wallet, productMarketplaceAddress);
-        const product = await productMarketplace.products(this.productId);
-        const subscriptionNFT = new ProductContracts.SubscriptionNFT(wallet, product.nft);
-        let nftBalance = await subscriptionNFT.balanceOf(recipient);
-        if (nftBalance.eq(0)) {
-            return this.subscribe(startTime, duration, recipient, callback, confirmationCallback);
-        }
+        const subscriptionNFT = new ProductContracts.SubscriptionNFT(wallet, this.productInfo.nft);
         let nftId = await subscriptionNFT.tokenOfOwnerByIndex({
             owner: recipient,
             index: 0
         });
-        let basePrice: BigNumber = product.price;
+        let basePrice: BigNumber = this.productInfo.price;
         let discountRuleId = this.discountApplied?.id ?? 0;
         if (discountRuleId !== 0) {
-            const discount = await this.getDiscount(this.productId, product.price, discountRuleId);
+            const discount = await this.getDiscount(this.productId, this.productInfo.price, discountRuleId);
             basePrice = discount.price;
             if (discount.id === 0) discountRuleId = 0;
         }
-        const amount = product.priceDuration.eq(duration) ? basePrice : basePrice.times(duration).div(product.priceDuration);
+        const amount = this.productInfo.priceDuration.eq(duration) ? basePrice : basePrice.times(duration).div(this.productInfo.priceDuration);
         let receipt;
         try {
             this.registerSendTxEvents({
                 transactionHash: callback,
                 confirmation: confirmationCallback
             });
-            if (product.token === Utils.nullAddress) {
+            if (this.productInfo.token.address === Utils.nullAddress) {
                 receipt = await productMarketplace.renewSubscription({
                     productId: this.productId,
                     nftId: nftId,
