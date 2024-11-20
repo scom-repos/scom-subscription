@@ -25,8 +25,10 @@ import { ITokenObject } from '@scom/scom-token-list';
 import ScomTxStatusModal from '@scom/scom-tx-status-modal';
 import { inputStyle, linkStyle } from './index.css';
 import { ISubscription } from './interface';
-import { Model } from './model';
+import { IModel, TonModel, EVMModel } from './model';
 import ScomWalletModal from '@scom/scom-wallet-modal';
+import { TonWallet } from './tonWallet';
+import { formatNumber } from './commonUtils';
 
 const Theme = Styles.Theme.ThemeVars;
 const path = application.currentModuleDir;
@@ -76,12 +78,30 @@ export default class ScomSubscription extends Module {
     private btnApprove: Button;
     private btnSubmit: Button;
     private txStatusModal: ScomTxStatusModal;
-    private model: Model;
+    private model: IModel;
     private mdWallet: ScomWalletModal;
     private approvalModelAction: IERC20ApprovalAction;
     private isApproving: boolean = false;
     private tokenAmountIn: string = '0';
+    private tonWallet: TonWallet;
     public onSubscribed?: () => void;
+
+    get durationUnits() {
+        return [
+            {
+                label: 'Day(s)',
+                value: 'days'
+            },
+            {
+                label: 'Month(s)',
+                value: 'months'
+            },
+            {
+                label: 'Year(s)',
+                value: 'years'
+            }
+        ];
+    }
 
     private get duration() {
         return Number(this.edtDuration.value) || 0;
@@ -120,7 +140,29 @@ export default class ScomSubscription extends Module {
     }
 
     async setData(data: ISubscription) {
+        const moduleDir = this['currentModuleDir'] || path;
+        if (data.paymentMethod === PaymentMethod.EVM) {
+            this.model = new EVMModel(moduleDir);
+        }
+        else {
+            this.model = new TonModel(moduleDir);
+            this.tonWallet = new TonWallet(moduleDir, this.handleTonWalletStatusChanged.bind(this));
+        }
+        this.model.on("chainChanged", this.onChainChanged.bind(this));
+        this.model.on("walletConnected", this.onWalletConnected.bind(this));
+        this.model.on("walletUpdated", (data: any) => {
+            this.refreshDappContainer(data);
+        });
+        this.handleDurationChanged = this.handleDurationChanged.bind(this);
+        this.comboDurationUnit.items = this.durationUnits;
+        this.comboDurationUnit.selectedItem = this.durationUnits[0];
         await this.model.setData(data);
+        this.showLoading();
+        this.edtStartDate.value = undefined;
+        this.edtDuration.value = '';
+        this.comboDurationUnit.selectedItem = this.durationUnits[0];
+        await this.refreshDApp();
+        this.hideLoading();
     }
 
     getData() {
@@ -188,18 +230,8 @@ export default class ScomSubscription extends Module {
         this.determineBtnSubmitCaption();
     }
 
-    private refreshDappContainer = () => {
-        const rpcWallet = this.model.getRpcWallet();
-        const { chainId, defaultChainId } = this.model.getData();
-        const _chainId = chainId || rpcWallet?.chainId;
-        const containerData = {
-            defaultChainId: chainId || defaultChainId,
-            wallets: this.model.wallets,
-            networks: _chainId ? [{ chainId: _chainId }] : this.model.networks,
-            showHeader: this.model.showHeader,
-            rpcWalletId: rpcWallet.instanceId
-        }
-        if (this.containerDapp?.setData) this.containerDapp.setData(containerData);
+    private refreshDappContainer = (data: any) => {
+        if (this.containerDapp?.setData) this.containerDapp.setData(data);
     }
 
     private async initApprovalAction() {
@@ -286,15 +318,6 @@ export default class ScomSubscription extends Module {
         }
     }
 
-    private async updateUIBySetData() {
-        this.showLoading();
-        this.edtStartDate.value = undefined;
-        this.edtDuration.value = '';
-        this.comboDurationUnit.selectedItem = this.model.durationUnits[0];
-        await this.refreshDApp();
-        this.hideLoading();
-    }
-
     private async updateEVMUI() {
         try {
             await this.model.initWallet();
@@ -304,7 +327,7 @@ export default class ScomSubscription extends Module {
             }
             this.model.productInfo = await this.model.fetchProductInfo(this.model.productId);
             if (this.model.isRpcWalletConnected()) await this.initApprovalAction();
-            this.refreshDappContainer();
+            this.model.updateDappContainerData();
             this.comboRecipient.items = this.model.recipients.map(address => ({
                 label: address,
                 value: address
@@ -341,7 +364,7 @@ export default class ScomSubscription extends Module {
 
     private updateSpotsRemaining() {
         if (this.model.productId >= 0) {
-            const remaining = this.model.formatNumber(this.model.productInfo.quantity, 0);
+            const remaining = formatNumber(this.model.productInfo.quantity, 0);
             this.lblRemaining.caption = remaining;
             this.lblSpotsRemaining.caption = this.model.productInfo.quantity.gt(0) ? `&#128293; Hurry! Only [ ${remaining} NFTs Left ] &#128293;` : 'SOLD OUT';
             this.lblSpotsRemaining.font = { bold: true, size: '1rem', color: this.model.productInfo.quantity.gt(0) ? Theme.text.primary : Theme.colors.error.dark };
@@ -350,20 +373,6 @@ export default class ScomSubscription extends Module {
             this.lblRemaining.caption = '';
             this.lblSpotsRemaining.caption = '';
             this.pnlSpotsRemaining.visible = false;
-        }
-    }
-
-    private updateBasePrice(isEVM: boolean) {
-        if (isEVM) {
-            const { token, price, priceDuration } = this.model.productInfo;
-            const productPrice = Utils.fromDecimals(price, token.decimals).toFixed();
-            const days = Math.ceil((priceDuration?.toNumber() || 0) / 86400);
-            const duration = days > 1 ? ` for ${days} days` : ' per day';
-            this.lblBasePrice.caption = `${productPrice ? this.model.formatNumber(productPrice, 6) : ""} ${token?.symbol || ""}${duration}`;
-        } else {
-            const { durationInDays, currency, tokenAmount } = this.model.getData();
-            const duration = durationInDays > 1 ? ` for ${durationInDays} days` : ' per day';
-            this.lblBasePrice.caption = `${tokenAmount ? this.model.formatNumber(tokenAmount, 6) : ""} ${currency}${duration}`;
         }
     }
 
@@ -376,7 +385,6 @@ export default class ScomSubscription extends Module {
             if (isEVM) {
                 await this.updateEVMUI();
             } else {
-                this.model.initTonWallet();
                 if (this.containerDapp?.setData) await this.containerDapp.setData({
                     showHeader: false
                 });
@@ -391,7 +399,7 @@ export default class ScomSubscription extends Module {
             this.pnlCustomStartDate.visible = !this.isRenewal;
             this.lblStartDate.caption = this.isRenewal ? this.edtStartDate.value.format('DD/MM/YYYY hh:mm A') : "Now";
             this.lblStartDate.visible = true;
-            this.updateBasePrice(isEVM);
+            this.lblBasePrice.caption = this.model.getBasePriceLabel();
             this.btnSubmit.visible = !isTelegram;
             const rule = discountRuleId ? discountRules.find(rule => rule.id === discountRuleId) : null;
             const isExpired = rule && rule.endTime && rule.endTime < moment().unix();
@@ -401,11 +409,11 @@ export default class ScomSubscription extends Module {
                     this.edtStartDate.value = moment(rule.startTime * 1000);
                 }
                 this.edtDuration.value = rule.minDuration || "1";
-                this.comboDurationUnit.selectedItem = this.model.durationUnits[0];
+                this.comboDurationUnit.selectedItem = this.durationUnits[0];
                 this.model.discountApplied = rule;
                 this._updateEndDate();
                 this._updateTotalAmount();
-                if (this.model.isTonWalletConnected) {
+                if (this.tonWallet.isWalletConnected) {
                     this.btnSubmit.enabled = this.edtDuration.value && this.duration > 0 && Number.isInteger(this.duration);
                 }
             } else {
@@ -439,7 +447,7 @@ export default class ScomSubscription extends Module {
                 this.btnSubmit.caption = this.isRenewal ? 'Renew Subscription' : 'Subscribe';
             }
         } else {
-            if (!this.model.isTonWalletConnected) {
+            if (!this.tonWallet.isWalletConnected) {
                 this.btnSubmit.caption = 'Connect Wallet';
             }
             else {
@@ -471,10 +479,10 @@ export default class ScomSubscription extends Module {
         this.pnlDiscount.visible = discountType != null;
         if (this.pnlDiscount.visible) {
             this.lblDiscount.caption = discountType === 'Percentage' ? `Discount (${discountValue}%)` : 'Discount';
-            this.lblDiscountAmount.caption = `-${this.model.formatNumber(discountAmount, 6)} ${currency || ''}`;
+            this.lblDiscountAmount.caption = `-${formatNumber(discountAmount, 6)} ${currency || ''}`;
         }
         this.tokenAmountIn = totalAmount.toFixed();
-        this.lblOrderTotal.caption = `${this.model.formatNumber(totalAmount, 6)} ${currency || ''}`;
+        this.lblOrderTotal.caption = `${formatNumber(totalAmount, 6)} ${currency || ''}`;
         if (this.approvalModelAction) {
           this.approvalModelAction.checkAllowance(this.model.token, this.tokenAmountIn);
         }
@@ -507,7 +515,7 @@ export default class ScomSubscription extends Module {
         this._updateEndDate();
         this._updateDiscount();
         this._updateTotalAmount();
-        if (this.model.isTonWalletConnected) {
+        if (this.tonWallet.isWalletConnected) {
             this.btnSubmit.enabled = this.edtDuration.value && this.duration > 0 && Number.isInteger(this.duration);
         }
     }
@@ -649,8 +657,8 @@ export default class ScomSubscription extends Module {
             this.showTxStatusModal('warning', 'Confirming');
             this.approvalModelAction.doPayAction();
         } else if (paymentMethod === PaymentMethod.TON) {
-            if (!this.model.isTonWalletConnected) {
-                this.model.connectTonWallet();
+            if (!this.tonWallet.isWalletConnected) {
+                this.tonWallet.connectWallet();
                 return;
             }
             try {
@@ -658,7 +666,8 @@ export default class ScomSubscription extends Module {
                 const startTime = this.edtStartDate.value.unix();
                 const endTime = moment.unix(startTime).add(this.duration, this.durationUnit).unix();
                 const days = this.model.getDurationInDays(this.duration, this.durationUnit, this.edtStartDate.value);
-                await this.model.tonPayment(startTime, endTime, days);
+                const txData = this.model.getPaymentTransactionData(startTime, endTime, days);
+                await this.tonWallet.sendTransaction(txData);
                 if (this.onSubscribed) this.onSubscribed();
             } catch (error) {
                 this.showTxStatusModal('error', error);
@@ -668,18 +677,7 @@ export default class ScomSubscription extends Module {
     }
 
     init() {
-        const moduleDir = this['currentModuleDir'] || path;
-        this.model = new Model(moduleDir);
         super.init();
-        this.model.onTonWalletStatusChanged = this.handleTonWalletStatusChanged.bind(this);
-        this.model.onChainChanged = this.onChainChanged.bind(this);
-        this.model.onWalletConnected = this.onWalletConnected.bind(this);
-        this.model.refreshDappContainer = this.refreshDappContainer.bind(this);
-        this.model.updateUIBySetData = this.updateUIBySetData.bind(this);
-        this.handleDurationChanged = this.handleDurationChanged.bind(this);
-        const durationUnits = this.model.durationUnits;
-        this.comboDurationUnit.items = durationUnits;
-        this.comboDurationUnit.selectedItem = durationUnits[0];
     }
 
     render() {

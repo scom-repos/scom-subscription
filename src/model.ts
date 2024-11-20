@@ -3,82 +3,97 @@ import getNetworkList from "@scom/scom-network-list";
 import { ContractInfoByChainType, ContractType, IExtendedNetwork, INetworkConfig, IProductInfo, ISubscription, IWalletPlugin } from "./interface";
 import configData from './data.json';
 import { ISubscriptionDiscountRule, Nip19, PaymentMethod, SocialDataManager } from "@scom/scom-social-sdk";
-import { BigNumber, Constants, Erc20, ERC20ApprovalModel, IERC20ApprovalEventOptions, IEventBusRegistry, INetwork, ISendTxEventsOptions, IWallet, Utils, Wallet } from "@ijstech/eth-wallet";
+import { BigNumber, Constants, Erc20, ERC20ApprovalModel, IERC20ApprovalEventOptions, IEventBusRegistry, INetwork, IRpcWallet, ISendTxEventsOptions, IWallet, Utils, Wallet } from "@ijstech/eth-wallet";
 import { Contracts as ProductContracts } from '@scom/scom-product-contract';
 import { ITokenObject, tokenStore } from "@scom/scom-token-list";
+import { formatNumber } from "./commonUtils";
 
-export class Model {
+export interface ITonUtils {
+    constructPayload(msg: string): string;
+}
+
+export class TonUtils implements ITonUtils {
+    private toncore: any;
+
+    constructor(moduleDir: string) {
+        this.loadLib(moduleDir);
+    }
+
+    async loadLib(moduleDir: string) {
+        let self = this;
+        return new Promise((resolve, reject) => {
+            RequireJS.config({
+                baseUrl: `${moduleDir}/lib`,
+                paths: {
+                    'ton-core': 'ton-core',
+                }
+            })
+            RequireJS.require(['ton-core'], function (TonCore: any) {
+                self.toncore = TonCore;
+                resolve(self.toncore);
+            });
+        })
+    }
+
+    constructPayload(msg: string) {
+        const body = this.toncore.beginCell()
+            .storeUint(0, 32)
+            .storeStringTail(msg)
+            .endCell();
+        const payload = body.toBoc().toString("base64");
+        return payload;
+    }
+}
+
+class EventEmitter {
+    private events: { [key: string]: Function[] } = {};
+
+    on(event: string, listener: Function) {
+        if (!this.events[event]) {
+            this.events[event] = [];
+        }
+        this.events[event].push(listener);
+    }
+
+    off(event: string, listener: Function) {
+        if (!this.events[event]) return;
+        this.events[event] = this.events[event].filter(l => l !== listener);
+    }
+
+    emit(event: string, data?: any) {
+        if (!this.events[event]) return;
+        this.events[event].forEach(listener => listener(data));
+    }
+}
+
+export class TonModel extends EventEmitter {
     private _data: ISubscription = {};
     private _productInfo: IProductInfo;
-    private rpcWalletEvents: IEventBusRegistry[] = [];
-    private rpcWalletId: string = '';
-    private infuraId: string = '';
-    private defaultNetworks: INetworkConfig[];
-    private defaultWallets: IWalletPlugin[] = [
-        {
-            "name": "metamask"
-        },
-        {
-            "name": "walletconnect"
-        }
-    ];
-    private contractInfoByChain: ContractInfoByChainType = {};
-    private networkMap: { [key: number]: IExtendedNetwork };
     private _discountApplied: ISubscriptionDiscountRule;
     private _approvalModel: ERC20ApprovalModel;
     private _dataManager: SocialDataManager;
-    private toncore: any;
-    private tonConnectUI: any;
-    private _isTonWalletConnected: boolean = false;
+    private _tonUtils: ITonUtils;
     private _productMarketplaceAddress: string;
-    public onTonWalletStatusChanged: (isConnected: boolean) => void;
-    public onChainChanged: () => Promise<void>;
-    public onWalletConnected: () => Promise<void>;
-    public refreshDappContainer: () => void;
-    public updateUIBySetData: () => Promise<void>;
 
     get productMarketplaceAddress() {
         return this._productMarketplaceAddress;
     }
 
-    get durationUnits() {
-        return [
-            {
-                label: 'Day(s)',
-                value: 'days'
-            },
-            {
-                label: 'Month(s)',
-                value: 'months'
-            },
-            {
-                label: 'Year(s)',
-                value: 'years'
-            }
-        ];
-    }
-
     get paymentMethod() {
         if (this._data.paymentMethod) {
             return this._data.paymentMethod;
-        } else if (this._data.chainId) {
-            return PaymentMethod.EVM;
-        } else {
+        } 
+        else {
             return this._data.currency === 'TON' ? PaymentMethod.TON : PaymentMethod.Telegram;
         }
     }
 
     get currency() {
-        if (this.paymentMethod === PaymentMethod.EVM) {
-            return this.productInfo.token?.symbol;
-        } else {
-            return this._data.currency;
-        }
+        return this._data.currency;
     }
 
     get chainId() {
-        const rpcWallet = this.getRpcWallet();
-        return rpcWallet?.chainId;
+        return 0;
     }
 
     get token() {
@@ -86,35 +101,19 @@ export class Model {
     }
 
     get wallets() {
-        return this._data.wallets ?? this.defaultWallets;
-    }
-
-    set wallets(value: IWalletPlugin[]) {
-        this._data.wallets = value;
+        return [];
     }
 
     get networks() {
-        const nets = this._data.networks ?? this.defaultNetworks;
-        if (this._data.chainId && !nets.some(v => v.chainId === this._data.chainId)) {
-            nets.push({ chainId: this._data.chainId });
-        }
-        return nets;
+        return [];
     }
-
-    set networks(value: INetworkConfig[]) {
-        this._data.networks = value;
-    }
-
+    
     get showHeader() {
         return this._data.showHeader ?? true;
     }
 
     set showHeader(value: boolean) {
         this._data.showHeader = value;
-    }
-
-    get isTonWalletConnected() {
-        return this._isTonWalletConnected;
     }
 
     get recipient() {
@@ -180,7 +179,7 @@ export class Model {
     set productInfo(info: IProductInfo) {
         this._productInfo = info;
     }
-    
+
     get dataManager() {
         return this._dataManager || application.store?.mainDataManager;
     }
@@ -190,6 +189,351 @@ export class Model {
     }
 
     constructor(moduleDir: string) {
+        super();
+        this._tonUtils = new TonUtils(moduleDir);
+    }
+
+    async initWallet() {
+        throw new Error("Method not implemented.");
+    }
+
+    updateDappContainerData() {
+        this.emit("walletUpdated");
+    }
+
+    isClientWalletConnected() {
+        const wallet = Wallet.getClientInstance();
+        return wallet.isConnected;
+    }
+
+    isRpcWalletConnected() {
+        return false;
+    }
+
+    async switchNetwork(chainId: number) {
+        throw new Error("Method not implemented.");
+    }
+
+    getNetworkInfo(chainId: number) {
+        return null;
+    }
+
+    getContractAddress(type: ContractType) {
+        return '';
+    }
+
+    viewExplorerByAddress(chainId: number, address: string) {      
+    }
+
+    getDurationInDays(duration: number, unit: 'days' | 'months' | 'years', startDate: any) {
+        if (unit === 'days') {
+            return duration;
+        } else {
+            const dateFormat = 'YYYY-MM-DD';
+            const start = startDate ? moment(startDate.format(dateFormat), dateFormat) : moment();
+            const end = moment(start).add(duration, unit);
+            const diff = end.diff(start, 'days');
+            return diff;
+        }
+    }
+
+    updateDiscount = (duration: number, startDate: any, days: number) => {
+        this.discountApplied = undefined;
+        if (!this._data.discountRules?.length || !duration || !startDate) return;
+        const paymentMethod = this.paymentMethod;
+        const price = new BigNumber(this._data.tokenAmount);
+        const durationInDays = this._data.durationInDays;
+        const startTime = startDate.unix();
+        let discountAmount: BigNumber;
+        for (let rule of this._data.discountRules) {
+            if (rule.discountApplication === 0 && this.isRenewal) continue;
+            if (rule.discountApplication === 1 && !this.isRenewal) continue;
+            if ((rule.startTime > 0 && startTime < rule.startTime) || (rule.endTime > 0 && startTime > rule.endTime) || rule.minDuration > days) continue;
+            let basePrice: BigNumber = price;
+            if (rule.discountPercentage > 0) {
+                basePrice = price.times(1 - rule.discountPercentage / 100)
+            } else if (rule.fixedPrice > 0) {
+                basePrice = new BigNumber(rule.fixedPrice);
+            }
+            let tmpDiscountAmount = price.minus(basePrice).div(durationInDays).times(days);
+            if (!this.discountApplied || tmpDiscountAmount.gt(discountAmount)) {
+                this.discountApplied = rule;
+                discountAmount = tmpDiscountAmount;
+            }
+        }
+    }
+
+    getDiscountAndTotalAmount(days: number) {
+        let discountType: 'Percentage' | 'FixedAmount';
+        let discountValue: number;
+        let discountAmount: BigNumber;
+        let totalAmount: BigNumber;
+        const price = new BigNumber(this._data?.tokenAmount || 0);
+        let basePrice: BigNumber = price;
+        if (this.discountApplied) {
+            if (this.discountApplied.discountPercentage > 0) {
+                discountValue = this.discountApplied.discountPercentage;
+                discountType = 'Percentage';
+                basePrice = price.times(1 - this.discountApplied.discountPercentage / 100);
+            } else if (this.discountApplied.fixedPrice > 0) {
+                discountValue = this.discountApplied.fixedPrice;
+                discountType = 'FixedAmount';
+                basePrice = new BigNumber(this.discountApplied.fixedPrice);
+            }
+            if (discountType) {
+                discountAmount = price.minus(basePrice).div(this._data.durationInDays).times(days);
+            }
+        }
+        const pricePerDay = basePrice.div(this._data?.durationInDays || 1);
+        totalAmount = pricePerDay.times(days);
+        return { discountType, discountValue, discountAmount, totalAmount }
+    }
+
+    async getProductId(nftAddress: string, nftId?: number) {
+        return 0;
+    }
+
+    async fetchProductInfo(productId: number) {
+        return null;
+    }
+
+    async getDiscount(promotionAddress: string, productId: number, productPrice: BigNumber, discountRuleId: number) {
+        let basePrice: BigNumber = productPrice;
+        const wallet = Wallet.getClientInstance();
+        const promotion = new ProductContracts.Promotion(wallet, promotionAddress);
+        const index = await promotion.discountRuleIdToIndex({ param1: productId, param2: discountRuleId });
+        const rule = await promotion.discountRules({ param1: productId, param2: index });
+        if (rule.discountPercentage.gt(0)) {
+            const discount = productPrice.times(rule.discountPercentage).div(100);
+            if (productPrice.gt(discount))
+                basePrice = productPrice.minus(discount);
+        } else if (rule.fixedPrice.gt(0)) {
+            basePrice = rule.fixedPrice;
+        } else {
+            discountRuleId = 0;
+        }
+        return {
+            price: basePrice,
+            id: discountRuleId
+        }
+    }
+
+    async getSubscriptionAction(recipient: string) {
+        const wallet = Wallet.getClientInstance();
+        const subscriptionNFT = new ProductContracts.SubscriptionNFT(wallet, this.productInfo.nft);
+        let nftBalance = await subscriptionNFT.balanceOf(recipient);
+        if (nftBalance.eq(0)) {
+            return this.subscribe.bind(this);
+        }
+        else {
+            return this.renewSubscription.bind(this);
+        }
+    }
+
+    async subscribe(startTime: number, duration: number, recipient: string, callback?: any, confirmationCallback?: any) {
+        return null;
+    }
+
+    async renewSubscription(startTime: number, duration: number, recipient: string, callback?: any, confirmationCallback?: any) {
+        return null;
+    }
+
+    getPaymentTransactionData(startTime: number, endTime: number, days: number) {
+        const { totalAmount } = this.getDiscountAndTotalAmount(days);
+        let subscriptionFee = totalAmount;
+        let subscriptionFeeToAddress = this._data.recipient;
+
+        const creatorPubkey = Nip19.decode(this._data.creatorId).data as string;
+        const comment = `${creatorPubkey}:${this._data.communityId}:${this.dataManager.selfPubkey}:${startTime}:${endTime}`;
+        const payload = this._tonUtils.constructPayload(comment);
+        //https://ton-connect.github.io/sdk/modules/_tonconnect_ui.html#send-transaction
+        const transaction = {
+            validUntil: Math.floor(Date.now() / 1000) + 60, // 60 sec
+            messages: [
+                {
+                    address: subscriptionFeeToAddress,
+                    amount: subscriptionFee.times(1e9).toFixed(),
+                    payload: payload
+                }
+            ]
+        };
+        return transaction;
+    }
+
+    getBasePriceLabel() {
+        const { durationInDays, currency, tokenAmount } = this.getData();
+        const duration = durationInDays > 1 ? ` for ${durationInDays} days` : ' per day';
+        return `${tokenAmount ? formatNumber(tokenAmount, 6) : ""} ${currency}${duration}`;
+    }
+
+    async setApprovalModelAction(options: IERC20ApprovalEventOptions) {
+        return null;
+    }
+
+    async setData(value: ISubscription) {
+        this._data = value;
+    }
+
+    getData() {
+        return this._data;
+    }
+}
+
+export class EVMModel extends EventEmitter {
+    private _data: ISubscription = {};
+    private _productInfo: IProductInfo;
+    private rpcWalletEvents: IEventBusRegistry[] = [];
+    private rpcWalletId: string = '';
+    private infuraId: string = '';
+    private defaultNetworks: INetworkConfig[];
+    private defaultWallets: IWalletPlugin[] = [
+        {
+            "name": "metamask"
+        },
+        {
+            "name": "walletconnect"
+        }
+    ];
+    private contractInfoByChain: ContractInfoByChainType = {};
+    private networkMap: { [key: number]: IExtendedNetwork };
+    private _discountApplied: ISubscriptionDiscountRule;
+    private _approvalModel: ERC20ApprovalModel;
+    private _dataManager: SocialDataManager;
+    private _productMarketplaceAddress: string;
+
+    get productMarketplaceAddress() {
+        return this._productMarketplaceAddress;
+    }
+
+    get paymentMethod() {
+        if (this._data.paymentMethod) {
+            return this._data.paymentMethod;
+        } else if (this._data.chainId) {
+            return PaymentMethod.EVM;
+        } else {
+            return this._data.currency === 'TON' ? PaymentMethod.TON : PaymentMethod.Telegram;
+        }
+    }
+
+    get currency() {
+        if (this.paymentMethod === PaymentMethod.EVM) {
+            return this.productInfo.token?.symbol;
+        } else {
+            return this._data.currency;
+        }
+    }
+
+    get chainId() {
+        const rpcWallet = this.getRpcWallet();
+        return rpcWallet?.chainId;
+    }
+
+    get token() {
+        return this.productInfo?.token;
+    }
+
+    get wallets() {
+        return this._data.wallets ?? this.defaultWallets;
+    }
+
+    set wallets(value: IWalletPlugin[]) {
+        this._data.wallets = value;
+    }
+
+    get networks() {
+        const nets = this._data.networks ?? this.defaultNetworks;
+        if (this._data.chainId && !nets.some(v => v.chainId === this._data.chainId)) {
+            nets.push({ chainId: this._data.chainId });
+        }
+        return nets;
+    }
+
+    set networks(value: INetworkConfig[]) {
+        this._data.networks = value;
+    }
+
+    get showHeader() {
+        return this._data.showHeader ?? true;
+    }
+
+    set showHeader(value: boolean) {
+        this._data.showHeader = value;
+    }
+
+    get recipient() {
+        return this._data.recipient ?? '';
+    }
+
+    get recipients() {
+        return this._data.recipients || [];
+    }
+
+    get referrer() {
+        return this._data.referrer;
+    }
+
+    get approvalModel() {
+        return this._approvalModel;
+    }
+
+    get productId() {
+        return this._data.productId;
+    }
+
+    set productId(value: number) {
+        this._data.productId = value;
+    }
+
+    get isRenewal() {
+        return this._data.isRenewal;
+    }
+
+    set isRenewal(value: boolean) {
+        this._data.isRenewal = value;
+    }
+
+    get renewalDate() {
+        return this._data.renewalDate;
+    }
+
+    set renewalDate(value: number) {
+        this._data.renewalDate = value;
+    }
+
+    get discountApplied() {
+        return this._discountApplied;
+    }
+
+    set discountApplied(value: ISubscriptionDiscountRule) {
+        this._discountApplied = value;
+    }
+
+    get discountRuleId() {
+        return this._data.discountRuleId;
+    }
+
+    set discountRuleId(value: number) {
+        this._data.discountRuleId = value;
+    }
+
+    get productInfo() {
+        return this._productInfo;
+    }
+
+    set productInfo(info: IProductInfo) {
+        this._productInfo = info;
+    }
+
+    get dataManager() {
+        return this._dataManager || application.store?.mainDataManager;
+    }
+
+    set dataManager(manager: SocialDataManager) {
+        this._dataManager = manager;
+    }
+
+    constructor(moduleDir: string) {
+        super();
         const defaultNetworkList = getNetworkList();
         this.networkMap = defaultNetworkList.reduce((acc, cur) => {
             const explorerUrl = cur.blockExplorerUrls && cur.blockExplorerUrls.length ? cur.blockExplorerUrls[0] : "";
@@ -207,55 +551,6 @@ export class Model {
             this.contractInfoByChain = configData.contractInfo;
         }
         this.defaultNetworks = this.contractInfoByChain ? Object.keys(this.contractInfoByChain).map(chainId => ({ chainId: Number(chainId) })) : [];
-        this.loadLib(moduleDir);
-    }
-
-    async loadLib(moduleDir: string) {
-        let self = this;
-        return new Promise((resolve, reject) => {
-            RequireJS.config({
-                baseUrl: `${moduleDir}/lib`,
-                paths: {
-                    'ton-core': 'ton-core',
-                }
-            })
-            RequireJS.require(['ton-core'], function (TonCore: any) {
-                self.toncore = TonCore;
-                resolve(self.toncore);
-            });
-        })
-    }
-
-    initTonWallet() {
-        try {
-            let UI = window['TON_CONNECT_UI'];
-            if (!this.tonConnectUI) {
-                this.tonConnectUI = new UI.TonConnectUI({
-                    manifestUrl: 'https://ton.noto.fan/tonconnect/manifest.json',
-                    buttonRootId: 'pnlHeader'
-                });
-            }
-            this.tonConnectUI.connectionRestored.then(async (restored: boolean) => {
-                this._isTonWalletConnected = this.tonConnectUI.connected;
-                if (this.onTonWalletStatusChanged) this.onTonWalletStatusChanged(this._isTonWalletConnected);
-            });
-            this.tonConnectUI.onStatusChange((walletAndwalletInfo) => {
-                this._isTonWalletConnected = !!walletAndwalletInfo;
-                if (this.onTonWalletStatusChanged) this.onTonWalletStatusChanged(this._isTonWalletConnected);
-            });
-        } catch (err) {
-            // alert(err)
-            console.log(err);
-        }
-    }
-
-    async connectTonWallet() {
-        try {
-            await this.tonConnectUI.openModal();
-        }
-        catch (err) {
-            alert(err)
-        }
     }
 
     async initWallet() {
@@ -302,13 +597,33 @@ export class Model {
         this.initRpcWallet(this._data.chainId || this._data.defaultChainId);
         const rpcWallet = this.getRpcWallet();
         const chainChangedEvent = rpcWallet.registerWalletEvent(this, Constants.RpcWalletEvent.ChainChanged, async (chainId: number) => {
-            await this.onChainChanged();
+            this.emit("chainChanged");
         });
         const connectedEvent = rpcWallet.registerWalletEvent(this, Constants.RpcWalletEvent.Connected, async (connected: boolean) => {
-            this.onWalletConnected();
+            this.emit("walletConnected");
         });
         this.rpcWalletEvents.push(chainChangedEvent, connectedEvent);
-        this.refreshDappContainer();
+        const dappContainerData = this.getDappContainerData();
+        this.emit("walletUpdated", dappContainerData);
+    }
+
+    updateDappContainerData() {
+        const dappContainerData = this.getDappContainerData();
+        this.emit("walletUpdated", dappContainerData);
+    }
+
+    private getDappContainerData = () => {
+        const rpcWallet = this.getRpcWallet();
+        const { chainId, defaultChainId } = this.getData();
+        const _chainId = chainId || rpcWallet?.chainId;
+        const containerData = {
+            defaultChainId: chainId || defaultChainId,
+            wallets: this.wallets,
+            networks: _chainId ? [{ chainId: _chainId }] : this.networks,
+            showHeader: this.showHeader,
+            rpcWalletId: rpcWallet.instanceId
+        }
+        return containerData;
     }
 
     getRpcWallet() {
@@ -363,14 +678,6 @@ export class Model {
         })
     }
 
-    formatNumber(value: number | string | BigNumber, decimalFigures?: number) {
-        if (typeof value === 'object') {
-            value = value.toFixed();
-        }
-        const minValue = '0.0000001';
-        return FormatUtils.formatNumber(value, { decimalFigures: decimalFigures !== undefined ? decimalFigures : 4, minValue, hasTrailingZero: false });
-    };
-
     getDurationInDays(duration: number, unit: 'days' | 'months' | 'years', startDate: any) {
         if (unit === 'days') {
             return duration;
@@ -387,8 +694,8 @@ export class Model {
         this.discountApplied = undefined;
         if (!this._data.discountRules?.length || !duration || !startDate) return;
         const paymentMethod = this.paymentMethod;
-        const price = paymentMethod === PaymentMethod.EVM ? Utils.fromDecimals(this.productInfo.price, this.productInfo.token.decimals) : new BigNumber(this._data.tokenAmount);
-        const durationInDays = paymentMethod === PaymentMethod.EVM ? this.productInfo.priceDuration.div(86400) : this._data.durationInDays;
+        const price = Utils.fromDecimals(this.productInfo.price, this.productInfo.token.decimals);
+        const durationInDays = this.productInfo.priceDuration.div(86400);
         const startTime = startDate.unix();
         let discountAmount: BigNumber;
         for (let rule of this._data.discountRules) {
@@ -414,8 +721,7 @@ export class Model {
         let discountValue: number;
         let discountAmount: BigNumber;
         let totalAmount: BigNumber;
-        const isEVM = this.paymentMethod === PaymentMethod.EVM;
-        const price = isEVM ? this.productInfo.price : new BigNumber(this._data?.tokenAmount || 0);
+        const price = this.productInfo.price;
         let basePrice: BigNumber = price;
         if (this.discountApplied) {
             if (this.discountApplied.discountPercentage > 0) {
@@ -428,22 +734,13 @@ export class Model {
                 basePrice = new BigNumber(this.discountApplied.fixedPrice);
             }
             if (discountType) {
-                if (isEVM) {
-                    const discountAmountRaw = price.minus(basePrice).div(this.productInfo.priceDuration.div(86400)).times(days);
-                    discountAmount = Utils.fromDecimals(discountAmountRaw, this.productInfo.token.decimals);
-                } else {
-                    discountAmount = price.minus(basePrice).div(this._data.durationInDays).times(days);
-                }
+                const discountAmountRaw = price.minus(basePrice).div(this.productInfo.priceDuration.div(86400)).times(days);
+                discountAmount = Utils.fromDecimals(discountAmountRaw, this.productInfo.token.decimals);
             }
         }
-        if (isEVM) {
-            const pricePerDay = basePrice.div(this.productInfo.priceDuration.div(86400));
-            const amountRaw = pricePerDay.times(days);
-            totalAmount = Utils.fromDecimals(amountRaw, this.productInfo.token.decimals);
-        } else {
-            const pricePerDay = basePrice.div(this._data?.durationInDays || 1);
-            totalAmount = pricePerDay.times(days);
-        }
+        const pricePerDay = basePrice.div(this.productInfo.priceDuration.div(86400));
+        const amountRaw = pricePerDay.times(days);
+        totalAmount = Utils.fromDecimals(amountRaw, this.productInfo.token.decimals);
         return { discountType, discountValue, discountAmount, totalAmount }
     }
 
@@ -466,26 +763,6 @@ export class Model {
             }
         }
         return token;
-    }
-
-    async getERC20Amount(wallet: IWallet, tokenAddress: string, decimals: number) {
-        try {
-            let erc20 = new Erc20(wallet, tokenAddress, decimals);
-            return await erc20.balance;
-        } catch {
-            return new BigNumber(0);
-        }
-    }
-
-    async getTokenBalance(wallet: IWallet, token: ITokenObject) {
-        let balance = new BigNumber(0);
-        if (!token) return balance;
-        if (token.address && token.address !== Utils.nullAddress) {
-            balance = await this.getERC20Amount(wallet, token.address, token.decimals);
-        } else {
-            balance = await wallet.balance;
-        }
-        return balance;
     }
 
     async getProductId(nftAddress: string, nftId?: number) {
@@ -573,7 +850,7 @@ export class Model {
             return this.renewSubscription.bind(this);
         }
     }
-    
+
     async subscribe(startTime: number, duration: number, recipient: string, callback?: any, confirmationCallback?: any) {
         let commissionAddress = this.getContractAddress('Commission');
         const wallet = Wallet.getClientInstance();
@@ -704,38 +981,16 @@ export class Model {
         return receipt;
     }
 
-    async constructPayload(msg: string) {
-        const body = this.toncore.beginCell()
-            .storeUint(0, 32) 
-            .storeStringTail(msg) 
-            .endCell();
-        const payload =  body.toBoc().toString("base64");
-        return payload;
+    getPaymentTransactionData(startTime: number, endTime: number, days: number) {
+        throw new Error("Method not implemented.");
     }
 
-    async tonPayment(startTime: number, endTime: number, days: number) {
-        const { totalAmount } = this.getDiscountAndTotalAmount(days);
-        let subscriptionFee = totalAmount;
-        let subscriptionFeeToAddress = this._data.recipient;
-
-        const creatorPubkey = Nip19.decode(this._data.creatorId).data as string;
-        const comment = `${creatorPubkey}:${this._data.communityId}:${this.dataManager.selfPubkey}:${startTime}:${endTime}`;
-        const payload = await this.constructPayload(comment);
-        //https://ton-connect.github.io/sdk/modules/_tonconnect_ui.html#send-transaction
-        const transaction = {
-            validUntil: Math.floor(Date.now() / 1000) + 60, // 60 sec
-            messages: [
-                {
-                    address: subscriptionFeeToAddress,
-                    amount: subscriptionFee.times(1e9).toFixed(),
-                    payload: payload
-                }
-            ]
-        };
-        
-        const result = await this.tonConnectUI.sendTransaction(transaction);
-        // const txHash = await this.subscriptionModel.getTransactionHash(result.boc);
-        // await this.subscriptionModel.updateCommunitySubscription(this.dataManager, this._data.creatorId, this._data.communityId, startTime, endTime, txHash);
+    getBasePriceLabel() {
+        const { token, price, priceDuration } = this.productInfo;
+        const productPrice = Utils.fromDecimals(price, token.decimals).toFixed();
+        const days = Math.ceil((priceDuration?.toNumber() || 0) / 86400);
+        const duration = days > 1 ? ` for ${days} days` : ' per day';
+        return `${productPrice ? formatNumber(productPrice, 6) : ""} ${token?.symbol || ""}${duration}`;
     }
 
     async setApprovalModelAction(options: IERC20ApprovalEventOptions) {
@@ -751,10 +1006,48 @@ export class Model {
 
     async setData(value: ISubscription) {
         this._data = value;
-        if (this.updateUIBySetData) this.updateUIBySetData();
     }
 
     getData() {
         return this._data;
     }
+}
+
+export interface IModel extends EventEmitter {
+    isRenewal: boolean;
+    renewalDate: number;
+    showHeader: boolean;
+    setData(value: ISubscription): void;
+    getData(): ISubscription;
+    isRpcWalletConnected(): boolean;
+    isClientWalletConnected(): boolean;
+    updateDappContainerData(): void;
+    wallets: IWalletPlugin[];
+    networks: INetworkConfig[];
+    setApprovalModelAction(options: IERC20ApprovalEventOptions): Promise<any>;
+    chainId: number;
+    token: ITokenObject;
+    referrer: string;
+    getContractAddress(type: ContractType): string;
+    productMarketplaceAddress: string;
+    approvalModel: ERC20ApprovalModel;
+    initWallet(): void;
+    switchNetwork(chainId: number): Promise<void>;
+    productId: number;
+    currency: string;
+    fetchProductInfo(productId: number): Promise<IProductInfo>;
+    getSubscriptionAction(recipient: string): Promise<any>;
+    getProductId(nftAddress: string, nftId?: number): Promise<number>;
+    recipients: string[];
+    productInfo: IProductInfo;
+    paymentMethod: PaymentMethod;
+    discountRuleId: number;
+    discountApplied: ISubscriptionDiscountRule;
+    getNetworkInfo(chainId: number): IExtendedNetwork;
+    getDurationInDays(duration: number, unit: 'days' | 'months' | 'years', startDate: any): number;
+    getDiscountAndTotalAmount(days: number): { discountType: 'Percentage' | 'FixedAmount', discountValue: number, discountAmount: BigNumber, totalAmount: BigNumber };
+    viewExplorerByAddress(chainId: number, address: string): void;
+    getPaymentTransactionData(startTime: number, endTime: number, days: number): any;
+    updateDiscount(duration: number, startDate: any, days: number): void;
+    getBasePriceLabel(): string;
 }
