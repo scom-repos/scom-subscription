@@ -119,10 +119,6 @@ export default class ScomSubscription extends Module {
         this.pnlBody.visible = true;
     }
 
-    getConfigurators() {
-        return this.model.getConfigurators()
-    }
-
     async setData(data: ISubscription) {
         await this.model.setData(data);
     }
@@ -136,7 +132,50 @@ export default class ScomSubscription extends Module {
     }
 
     setTag(value: any) {
-        this.model.setTag(value);
+        const newValue = value || {};
+        if (!this.tag) this.tag = {};
+        for (let prop in newValue) {
+            if (newValue.hasOwnProperty(prop)) {
+                if (prop === 'light' || prop === 'dark')
+                    this.updateTag(prop, newValue[prop]);
+                else
+                    this.tag[prop] = newValue[prop];
+            }
+        }
+        this.updateTheme();
+    }
+
+    private updateTheme() {
+        const themeVar = document.body.style.getPropertyValue('--theme') || 'light';
+        this.updateStyle('--text-primary', this.tag[themeVar]?.fontColor);
+        this.updateStyle('--text-secondary', this.tag[themeVar]?.secondaryColor);
+        this.updateStyle('--background-main', this.tag[themeVar]?.backgroundColor);
+        this.updateStyle('--colors-primary-main', this.tag[themeVar]?.primaryColor);
+        this.updateStyle('--colors-primary-light', this.tag[themeVar]?.primaryLightColor);
+        this.updateStyle('--colors-primary-dark', this.tag[themeVar]?.primaryDarkColor);
+        this.updateStyle('--colors-secondary-light', this.tag[themeVar]?.secondaryLight);
+        this.updateStyle('--colors-secondary-main', this.tag[themeVar]?.secondaryMain);
+        this.updateStyle('--divider', this.tag[themeVar]?.borderColor);
+        this.updateStyle('--action-selected', this.tag[themeVar]?.selected);
+        this.updateStyle('--action-selected_background', this.tag[themeVar]?.selectedBackground);
+        this.updateStyle('--action-hover_background', this.tag[themeVar]?.hoverBackground);
+        this.updateStyle('--action-hover', this.tag[themeVar]?.hover);
+    }
+
+    private updateStyle(name: string, value: any) {
+        if (value) {
+            this.style.setProperty(name, value);
+        } else {
+            this.style.removeProperty(name);
+        }
+    }
+
+    private updateTag(type: 'light' | 'dark', value: any) {
+        this.tag[type] = this.tag[type] ?? {};
+        for (let prop in value) {
+            if (value.hasOwnProperty(prop))
+                this.tag[type][prop] = value[prop];
+        }
     }
 
     private onChainChanged = async () => {
@@ -259,12 +298,12 @@ export default class ScomSubscription extends Module {
     private async updateEVMUI() {
         try {
             await this.model.initWallet();
-            if (this.model.isRpcWalletConnected()) await this.initApprovalAction();
             const { chainId, tokenAddress } = this.model.getData();
             if (!this.model.productId) {
                 this.model.productId = await this.model.getProductId(tokenAddress);
             }
             this.model.productInfo = await this.model.fetchProductInfo(this.model.productId);
+            if (this.model.isRpcWalletConnected()) await this.initApprovalAction();
             this.refreshDappContainer();
             this.comboRecipient.items = this.model.recipients.map(address => ({
                 label: address,
@@ -630,7 +669,7 @@ export default class ScomSubscription extends Module {
 
     init() {
         const moduleDir = this['currentModuleDir'] || path;
-        this.model = new Model(this, moduleDir);
+        this.model = new Model(moduleDir);
         super.init();
         this.model.onTonWalletStatusChanged = this.handleTonWalletStatusChanged.bind(this);
         this.model.onChainChanged = this.onChainChanged.bind(this);

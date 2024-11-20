@@ -1,4 +1,4 @@
-import { application, FormatUtils, Module, moment, RequireJS } from "@ijstech/components";
+import { application, FormatUtils, moment, RequireJS } from "@ijstech/components";
 import getNetworkList from "@scom/scom-network-list";
 import { ContractInfoByChainType, ContractType, IExtendedNetwork, INetworkConfig, IProductInfo, ISubscription, IWalletPlugin } from "./interface";
 import configData from './data.json';
@@ -27,7 +27,6 @@ export class Model {
     private _discountApplied: ISubscriptionDiscountRule;
     private _approvalModel: ERC20ApprovalModel;
     private _dataManager: SocialDataManager;
-    private module: Module;
     private toncore: any;
     private tonConnectUI: any;
     private _isTonWalletConnected: boolean = false;
@@ -41,7 +40,7 @@ export class Model {
     get productMarketplaceAddress() {
         return this._productMarketplaceAddress;
     }
-    
+
     get durationUnits() {
         return [
             {
@@ -190,8 +189,7 @@ export class Model {
         this._dataManager = manager;
     }
 
-    constructor(module: Module, moduleDir: string) {
-        this.module = module;
+    constructor(moduleDir: string) {
         const defaultNetworkList = getNetworkList();
         this.networkMap = defaultNetworkList.reduce((acc, cur) => {
             const explorerUrl = cur.blockExplorerUrls && cur.blockExplorerUrls.length ? cur.blockExplorerUrls[0] : "";
@@ -751,20 +749,6 @@ export class Model {
         return approvalModelAction;
     }
 
-    getConfigurators() {
-        return [
-            {
-                name: 'Builder Configurator',
-                target: 'Builders',
-                getActions: this.getActions.bind(this),
-                getData: this.getData.bind(this),
-                setData: this.setData.bind(this),
-                getTag: this.getTag.bind(this),
-                setTag: this.setTag.bind(this)
-            }
-        ]
-    }
-
     async setData(value: ISubscription) {
         this._data = value;
         if (this.updateUIBySetData) this.updateUIBySetData();
@@ -772,61 +756,5 @@ export class Model {
 
     getData() {
         return this._data;
-    }
-
-    getTag() {
-        return this.module.tag;
-    }
-
-    setTag(value: any) {
-        const newValue = value || {};
-        if (!this.module.tag) this.module.tag = {};
-        for (let prop in newValue) {
-            if (newValue.hasOwnProperty(prop)) {
-                if (prop === 'light' || prop === 'dark')
-                    this.updateTag(prop, newValue[prop]);
-                else
-                    this.module.tag[prop] = newValue[prop];
-            }
-        }
-        this.updateTheme();
-    }
-
-    private updateTag(type: 'light' | 'dark', value: any) {
-        this.module.tag[type] = this.module.tag[type] ?? {};
-        for (let prop in value) {
-            if (value.hasOwnProperty(prop))
-                this.module.tag[type][prop] = value[prop];
-        }
-    }
-
-    private updateStyle(name: string, value: any) {
-        if (value) {
-            this.module.style.setProperty(name, value);
-        } else {
-            this.module.style.removeProperty(name);
-        }
-    }
-
-    private updateTheme() {
-        const themeVar = document.body.style.getPropertyValue('--theme') || 'light';
-        this.updateStyle('--text-primary', this.module.tag[themeVar]?.fontColor);
-        this.updateStyle('--text-secondary', this.module.tag[themeVar]?.secondaryColor);
-        this.updateStyle('--background-main', this.module.tag[themeVar]?.backgroundColor);
-        this.updateStyle('--colors-primary-main', this.module.tag[themeVar]?.primaryColor);
-        this.updateStyle('--colors-primary-light', this.module.tag[themeVar]?.primaryLightColor);
-        this.updateStyle('--colors-primary-dark', this.module.tag[themeVar]?.primaryDarkColor);
-        this.updateStyle('--colors-secondary-light', this.module.tag[themeVar]?.secondaryLight);
-        this.updateStyle('--colors-secondary-main', this.module.tag[themeVar]?.secondaryMain);
-        this.updateStyle('--divider', this.module.tag[themeVar]?.borderColor);
-        this.updateStyle('--action-selected', this.module.tag[themeVar]?.selected);
-        this.updateStyle('--action-selected_background', this.module.tag[themeVar]?.selectedBackground);
-        this.updateStyle('--action-hover_background', this.module.tag[themeVar]?.hoverBackground);
-        this.updateStyle('--action-hover', this.module.tag[themeVar]?.hover);
-    }
-
-    private getActions() {
-        const actions = [];
-        return actions;
     }
 }

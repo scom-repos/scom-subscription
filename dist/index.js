@@ -185,7 +185,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
         set dataManager(manager) {
             this._dataManager = manager;
         }
-        constructor(module, moduleDir) {
+        constructor(moduleDir) {
             this._data = {};
             this.rpcWalletEvents = [];
             this.rpcWalletId = '';
@@ -237,7 +237,6 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                     }
                 }
             };
-            this.module = module;
             const defaultNetworkList = (0, scom_network_list_1.default)();
             this.networkMap = defaultNetworkList.reduce((acc, cur) => {
                 const explorerUrl = cur.blockExplorerUrls && cur.blockExplorerUrls.length ? cur.blockExplorerUrls[0] : "";
@@ -757,19 +756,6 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             let approvalModelAction = this.approvalModel.getAction();
             return approvalModelAction;
         }
-        getConfigurators() {
-            return [
-                {
-                    name: 'Builder Configurator',
-                    target: 'Builders',
-                    getActions: this.getActions.bind(this),
-                    getData: this.getData.bind(this),
-                    setData: this.setData.bind(this),
-                    getTag: this.getTag.bind(this),
-                    setTag: this.setTag.bind(this)
-                }
-            ];
-        }
         async setData(value) {
             this._data = value;
             if (this.updateUIBySetData)
@@ -777,58 +763,6 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
         }
         getData() {
             return this._data;
-        }
-        getTag() {
-            return this.module.tag;
-        }
-        setTag(value) {
-            const newValue = value || {};
-            if (!this.module.tag)
-                this.module.tag = {};
-            for (let prop in newValue) {
-                if (newValue.hasOwnProperty(prop)) {
-                    if (prop === 'light' || prop === 'dark')
-                        this.updateTag(prop, newValue[prop]);
-                    else
-                        this.module.tag[prop] = newValue[prop];
-                }
-            }
-            this.updateTheme();
-        }
-        updateTag(type, value) {
-            this.module.tag[type] = this.module.tag[type] ?? {};
-            for (let prop in value) {
-                if (value.hasOwnProperty(prop))
-                    this.module.tag[type][prop] = value[prop];
-            }
-        }
-        updateStyle(name, value) {
-            if (value) {
-                this.module.style.setProperty(name, value);
-            }
-            else {
-                this.module.style.removeProperty(name);
-            }
-        }
-        updateTheme() {
-            const themeVar = document.body.style.getPropertyValue('--theme') || 'light';
-            this.updateStyle('--text-primary', this.module.tag[themeVar]?.fontColor);
-            this.updateStyle('--text-secondary', this.module.tag[themeVar]?.secondaryColor);
-            this.updateStyle('--background-main', this.module.tag[themeVar]?.backgroundColor);
-            this.updateStyle('--colors-primary-main', this.module.tag[themeVar]?.primaryColor);
-            this.updateStyle('--colors-primary-light', this.module.tag[themeVar]?.primaryLightColor);
-            this.updateStyle('--colors-primary-dark', this.module.tag[themeVar]?.primaryDarkColor);
-            this.updateStyle('--colors-secondary-light', this.module.tag[themeVar]?.secondaryLight);
-            this.updateStyle('--colors-secondary-main', this.module.tag[themeVar]?.secondaryMain);
-            this.updateStyle('--divider', this.module.tag[themeVar]?.borderColor);
-            this.updateStyle('--action-selected', this.module.tag[themeVar]?.selected);
-            this.updateStyle('--action-selected_background', this.module.tag[themeVar]?.selectedBackground);
-            this.updateStyle('--action-hover_background', this.module.tag[themeVar]?.hoverBackground);
-            this.updateStyle('--action-hover', this.module.tag[themeVar]?.hover);
-        }
-        getActions() {
-            const actions = [];
-            return actions;
         }
     }
     exports.Model = Model;
@@ -922,9 +856,6 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             this.pnlLoading.visible = false;
             this.pnlBody.visible = true;
         }
-        getConfigurators() {
-            return this.model.getConfigurators();
-        }
         async setData(data) {
             await this.model.setData(data);
         }
@@ -935,7 +866,49 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             return this.tag;
         }
         setTag(value) {
-            this.model.setTag(value);
+            const newValue = value || {};
+            if (!this.tag)
+                this.tag = {};
+            for (let prop in newValue) {
+                if (newValue.hasOwnProperty(prop)) {
+                    if (prop === 'light' || prop === 'dark')
+                        this.updateTag(prop, newValue[prop]);
+                    else
+                        this.tag[prop] = newValue[prop];
+                }
+            }
+            this.updateTheme();
+        }
+        updateTheme() {
+            const themeVar = document.body.style.getPropertyValue('--theme') || 'light';
+            this.updateStyle('--text-primary', this.tag[themeVar]?.fontColor);
+            this.updateStyle('--text-secondary', this.tag[themeVar]?.secondaryColor);
+            this.updateStyle('--background-main', this.tag[themeVar]?.backgroundColor);
+            this.updateStyle('--colors-primary-main', this.tag[themeVar]?.primaryColor);
+            this.updateStyle('--colors-primary-light', this.tag[themeVar]?.primaryLightColor);
+            this.updateStyle('--colors-primary-dark', this.tag[themeVar]?.primaryDarkColor);
+            this.updateStyle('--colors-secondary-light', this.tag[themeVar]?.secondaryLight);
+            this.updateStyle('--colors-secondary-main', this.tag[themeVar]?.secondaryMain);
+            this.updateStyle('--divider', this.tag[themeVar]?.borderColor);
+            this.updateStyle('--action-selected', this.tag[themeVar]?.selected);
+            this.updateStyle('--action-selected_background', this.tag[themeVar]?.selectedBackground);
+            this.updateStyle('--action-hover_background', this.tag[themeVar]?.hoverBackground);
+            this.updateStyle('--action-hover', this.tag[themeVar]?.hover);
+        }
+        updateStyle(name, value) {
+            if (value) {
+                this.style.setProperty(name, value);
+            }
+            else {
+                this.style.removeProperty(name);
+            }
+        }
+        updateTag(type, value) {
+            this.tag[type] = this.tag[type] ?? {};
+            for (let prop in value) {
+                if (value.hasOwnProperty(prop))
+                    this.tag[type][prop] = value[prop];
+            }
         }
         async initApprovalAction() {
             if (!this.approvalModelAction) {
@@ -1031,13 +1004,13 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
         async updateEVMUI() {
             try {
                 await this.model.initWallet();
-                if (this.model.isRpcWalletConnected())
-                    await this.initApprovalAction();
                 const { chainId, tokenAddress } = this.model.getData();
                 if (!this.model.productId) {
                     this.model.productId = await this.model.getProductId(tokenAddress);
                 }
                 this.model.productInfo = await this.model.fetchProductInfo(this.model.productId);
+                if (this.model.isRpcWalletConnected())
+                    await this.initApprovalAction();
                 this.refreshDappContainer();
                 this.comboRecipient.items = this.model.recipients.map(address => ({
                     label: address,
@@ -1374,7 +1347,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
         }
         init() {
             const moduleDir = this['currentModuleDir'] || path;
-            this.model = new model_1.Model(this, moduleDir);
+            this.model = new model_1.Model(moduleDir);
             super.init();
             this.model.onTonWalletStatusChanged = this.handleTonWalletStatusChanged.bind(this);
             this.model.onChainChanged = this.onChainChanged.bind(this);
