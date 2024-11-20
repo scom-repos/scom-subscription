@@ -44,35 +44,11 @@ define("@scom/scom-subscription/data.json.ts", ["require", "exports"], function 
         "infuraId": "adc596bf88b648e2a8902bc9093930c5",
         "contractInfo": {
             97: {
-                "ProductMarketplace": {
-                    "address": "0x93e684ad2AEE178e23675fbE5bA88c3e4e7467f4"
-                },
-                "OneTimePurchaseNFT": {
-                    "address": "0x5aE9c7f08572D52e2DB8508B502D767A1ECf21Bf"
-                },
-                "SubscriptionNFTFactory": {
-                    "address": "0x0055e4edb49425A29784Bd9a7986F5b56dcc8f6b"
-                },
-                "Promotion": {
-                    "address": "0x13d23201a8A6661881d701E1cF56A30A8eb0aE90"
-                },
                 "Commission": {
                     "address": "0xcdc39C8bC8F9fDAF31D79f461B47477606770c62"
                 }
             },
             43113: {
-                "ProductMarketplace": {
-                    "address": "0xeC3747eAbf71D4BDF15Abb70398C04B642363D10"
-                },
-                "OneTimePurchaseNFT": {
-                    "address": "0x404eeCC44F7aFc1f7561b2A9bC475513206D4b15"
-                },
-                "SubscriptionNFTFactory": {
-                    "address": "0x9231761Bd5f32c8f6465d82168BAdaB109D23290"
-                },
-                "Promotion": {
-                    "address": "0x22786FF4E595f1B517242549ec1D263e62dc6F26"
-                },
                 "Commission": {
                     "address": "0x2Ed01CB805e7f52c92cfE9eC02E7Dc899cA53BCa"
                 }
@@ -85,6 +61,9 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Model = void 0;
     class Model {
+        get productMarketplaceAddress() {
+            return this._productMarketplaceAddress;
+        }
         get durationUnits() {
             return [
                 {
@@ -533,12 +512,13 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             return productId;
         }
         async fetchProductInfo(productId) {
-            let productMarketplaceAddress = this.getContractAddress('ProductMarketplace');
-            if (!productMarketplaceAddress)
-                return null;
             try {
                 const wallet = this.getRpcWallet();
-                const productMarketplace = new scom_product_contract_1.Contracts.ProductMarketplace(wallet, productMarketplaceAddress);
+                const subscriptionNFT = new scom_product_contract_1.Contracts.SubscriptionNFT(wallet, this._data.tokenAddress);
+                this._productMarketplaceAddress = await subscriptionNFT.minter();
+                if (!this._productMarketplaceAddress)
+                    return null;
+                const productMarketplace = new scom_product_contract_1.Contracts.ProductMarketplace(wallet, this._productMarketplaceAddress);
                 const product = await productMarketplace.products(productId);
                 const chainId = wallet.chainId;
                 if (product.token && product.token === eth_wallet_1.Utils.nullAddress) {
@@ -568,9 +548,8 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                 return null;
             }
         }
-        async getDiscount(productId, productPrice, discountRuleId) {
+        async getDiscount(promotionAddress, productId, productPrice, discountRuleId) {
             let basePrice = productPrice;
-            let promotionAddress = this.getContractAddress('Promotion');
             const wallet = eth_wallet_1.Wallet.getClientInstance();
             const promotion = new scom_product_contract_1.Contracts.Promotion(wallet, promotionAddress);
             const index = await promotion.discountRuleIdToIndex({ param1: productId, param2: discountRuleId });
@@ -604,14 +583,14 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
         }
         async subscribe(startTime, duration, recipient, callback, confirmationCallback) {
             let commissionAddress = this.getContractAddress('Commission');
-            let productMarketplaceAddress = this.getContractAddress('ProductMarketplace');
             const wallet = eth_wallet_1.Wallet.getClientInstance();
             const commission = new scom_product_contract_1.Contracts.Commission(wallet, commissionAddress);
-            const productMarketplace = new scom_product_contract_1.Contracts.ProductMarketplace(wallet, productMarketplaceAddress);
+            const productMarketplace = new scom_product_contract_1.Contracts.ProductMarketplace(wallet, this._productMarketplaceAddress);
             let basePrice = this.productInfo.price;
             let discountRuleId = this.discountApplied?.id ?? 0;
             if (discountRuleId !== 0) {
-                const discount = await this.getDiscount(this.productId, this.productInfo.price, discountRuleId);
+                const promotionAddress = await productMarketplace.promotion();
+                const discount = await this.getDiscount(promotionAddress, this.productId, this.productInfo.price, discountRuleId);
                 basePrice = discount.price;
                 if (discount.id === 0)
                     discountRuleId = 0;
@@ -692,9 +671,8 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             return receipt;
         }
         async renewSubscription(startTime, duration, recipient, callback, confirmationCallback) {
-            let productMarketplaceAddress = this.getContractAddress('ProductMarketplace');
             const wallet = eth_wallet_1.Wallet.getClientInstance();
-            const productMarketplace = new scom_product_contract_1.Contracts.ProductMarketplace(wallet, productMarketplaceAddress);
+            const productMarketplace = new scom_product_contract_1.Contracts.ProductMarketplace(wallet, this._productMarketplaceAddress);
             const subscriptionNFT = new scom_product_contract_1.Contracts.SubscriptionNFT(wallet, this.productInfo.nft);
             let nftId = await subscriptionNFT.tokenOfOwnerByIndex({
                 owner: recipient,
@@ -703,7 +681,8 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             let basePrice = this.productInfo.price;
             let discountRuleId = this.discountApplied?.id ?? 0;
             if (discountRuleId !== 0) {
-                const discount = await this.getDiscount(this.productId, this.productInfo.price, discountRuleId);
+                const promotionAddress = await productMarketplace.promotion();
+                const discount = await this.getDiscount(promotionAddress, this.productId, this.productInfo.price, discountRuleId);
                 basePrice = discount.price;
                 if (discount.id === 0)
                     discountRuleId = 0;
@@ -1036,7 +1015,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                     contractAddress = this.model.getContractAddress('Commission');
                 }
                 else {
-                    contractAddress = this.model.getContractAddress('ProductMarketplace');
+                    contractAddress = this.model.productMarketplaceAddress;
                 }
                 this.model.approvalModel.spenderAddress = contractAddress;
             }
@@ -1071,7 +1050,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                     this.detailWrapper.visible = true;
                     this.onToggleDetail();
                     this.btnDetail.visible = true;
-                    this.lblMarketplaceContract.caption = components_3.FormatUtils.truncateWalletAddress(this.model.getContractAddress('ProductMarketplace'));
+                    this.lblMarketplaceContract.caption = components_3.FormatUtils.truncateWalletAddress(this.model.productMarketplaceAddress);
                     this.lblNFTContract.caption = components_3.FormatUtils.truncateWalletAddress(tokenAddress);
                     const isNativeToken = !token.address || token.address === eth_wallet_2.Utils.nullAddress || !token.address.startsWith('0x');
                     if (isNativeToken) {
@@ -1281,7 +1260,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             this.btnDetail.rightIcon.name = isExpanding ? 'caret-down' : 'caret-up';
         }
         onViewMarketplaceContract() {
-            this.model.viewExplorerByAddress(this.model.chainId, this.model.getContractAddress('ProductMarketplace') || "");
+            this.model.viewExplorerByAddress(this.model.chainId, this.model.productMarketplaceAddress || "");
         }
         onViewNFTContract() {
             const { tokenAddress } = this.model.getData();
@@ -1302,7 +1281,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             }, 1600);
         }
         onCopyMarketplaceContract(target) {
-            components_3.application.copyToClipboard(this.model.getContractAddress('ProductMarketplace') || "");
+            components_3.application.copyToClipboard(this.model.productMarketplaceAddress || "");
             this.updateCopyIcon(target);
         }
         onCopyNFTContract(target) {

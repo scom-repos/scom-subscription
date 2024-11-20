@@ -7,17 +7,13 @@ export interface IExtendedNetwork extends INetwork {
     explorerAddressUrl?: string;
 };
 
-export type ContractType = 'ProductMarketplace' | 'OneTimePurchaseNFT' | 'SubscriptionNFTFactory' | 'Promotion' | 'Commission';
+export type ContractType =  'Commission';
 
 interface IContractDetailInfo {
     address: string;
 }
 
 export interface IContractInfo {
-    ProductMarketplace: IContractDetailInfo;
-    OneTimePurchaseNFT: IContractDetailInfo;
-    SubscriptionNFTFactory: IContractDetailInfo;
-    Promotion: IContractDetailInfo;
     Commission: IContractDetailInfo;
 }
 

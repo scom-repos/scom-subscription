@@ -241,7 +241,7 @@ export default class ScomSubscription extends Module {
                 contractAddress = this.model.getContractAddress('Commission');
             }
             else {
-                contractAddress = this.model.getContractAddress('ProductMarketplace');
+                contractAddress = this.model.productMarketplaceAddress;
             }
             this.model.approvalModel.spenderAddress = contractAddress;
         }
@@ -276,7 +276,7 @@ export default class ScomSubscription extends Module {
                 this.detailWrapper.visible = true;
                 this.onToggleDetail();
                 this.btnDetail.visible = true;
-                this.lblMarketplaceContract.caption = FormatUtils.truncateWalletAddress(this.model.getContractAddress('ProductMarketplace'));
+                this.lblMarketplaceContract.caption = FormatUtils.truncateWalletAddress(this.model.productMarketplaceAddress);
                 this.lblNFTContract.caption = FormatUtils.truncateWalletAddress(tokenAddress);
                 const isNativeToken = !token.address || token.address === Utils.nullAddress || !token.address.startsWith('0x');
                 if (isNativeToken) {
@@ -487,7 +487,7 @@ export default class ScomSubscription extends Module {
     }
 
     private onViewMarketplaceContract() {
-        this.model.viewExplorerByAddress(this.model.chainId, this.model.getContractAddress('ProductMarketplace') || "")
+        this.model.viewExplorerByAddress(this.model.chainId, this.model.productMarketplaceAddress || "")
     }
 
     private onViewNFTContract() {
@@ -511,7 +511,7 @@ export default class ScomSubscription extends Module {
     }
 
     private onCopyMarketplaceContract(target: Icon) {
-        application.copyToClipboard(this.model.getContractAddress('ProductMarketplace') || "");
+        application.copyToClipboard(this.model.productMarketplaceAddress || "");
         this.updateCopyIcon(target);
     }
 

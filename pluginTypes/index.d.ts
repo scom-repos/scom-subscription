@@ -14,15 +14,11 @@ declare module "@scom/scom-subscription/interface.ts" {
         explorerTxUrl?: string;
         explorerAddressUrl?: string;
     }
-    export type ContractType = 'ProductMarketplace' | 'OneTimePurchaseNFT' | 'SubscriptionNFTFactory' | 'Promotion' | 'Commission';
+    export type ContractType = 'Commission';
     interface IContractDetailInfo {
         address: string;
     }
     export interface IContractInfo {
-        ProductMarketplace: IContractDetailInfo;
-        OneTimePurchaseNFT: IContractDetailInfo;
-        SubscriptionNFTFactory: IContractDetailInfo;
-        Promotion: IContractDetailInfo;
         Commission: IContractDetailInfo;
     }
     export type ContractInfoByChainType = {
@@ -86,35 +82,11 @@ declare module "@scom/scom-subscription/data.json.ts" {
         infuraId: string;
         contractInfo: {
             97: {
-                ProductMarketplace: {
-                    address: string;
-                };
-                OneTimePurchaseNFT: {
-                    address: string;
-                };
-                SubscriptionNFTFactory: {
-                    address: string;
-                };
-                Promotion: {
-                    address: string;
-                };
                 Commission: {
                     address: string;
                 };
             };
             43113: {
-                ProductMarketplace: {
-                    address: string;
-                };
-                OneTimePurchaseNFT: {
-                    address: string;
-                };
-                SubscriptionNFTFactory: {
-                    address: string;
-                };
-                Promotion: {
-                    address: string;
-                };
                 Commission: {
                     address: string;
                 };
@@ -147,11 +119,13 @@ declare module "@scom/scom-subscription/model.ts" {
         private toncore;
         private tonConnectUI;
         private _isTonWalletConnected;
+        private _productMarketplaceAddress;
         onTonWalletStatusChanged: (isConnected: boolean) => void;
         onChainChanged: () => Promise<void>;
         onWalletConnected: () => Promise<void>;
         refreshDappContainer: () => void;
         updateUIBySetData: () => Promise<void>;
+        get productMarketplaceAddress(): string;
         get durationUnits(): {
             label: string;
             value: string;
@@ -228,7 +202,7 @@ declare module "@scom/scom-subscription/model.ts" {
             nftId: BigNumber;
             priceDuration: BigNumber;
         }>;
-        getDiscount(productId: number, productPrice: BigNumber, discountRuleId: number): Promise<{
+        getDiscount(promotionAddress: string, productId: number, productPrice: BigNumber, discountRuleId: number): Promise<{
             price: BigNumber;
             id: number;
         }>;

@@ -31,12 +31,17 @@ export class Model {
     private toncore: any;
     private tonConnectUI: any;
     private _isTonWalletConnected: boolean = false;
+    private _productMarketplaceAddress: string;
     public onTonWalletStatusChanged: (isConnected: boolean) => void;
     public onChainChanged: () => Promise<void>;
     public onWalletConnected: () => Promise<void>;
     public refreshDappContainer: () => void;
     public updateUIBySetData: () => Promise<void>;
 
+    get productMarketplaceAddress() {
+        return this._productMarketplaceAddress;
+    }
+    
     get durationUnits() {
         return [
             {
@@ -503,11 +508,12 @@ export class Model {
     }
 
     async fetchProductInfo(productId: number) {
-        let productMarketplaceAddress = this.getContractAddress('ProductMarketplace');
-        if (!productMarketplaceAddress) return null;
         try {
             const wallet = this.getRpcWallet();
-            const productMarketplace = new ProductContracts.ProductMarketplace(wallet, productMarketplaceAddress);
+            const subscriptionNFT = new ProductContracts.SubscriptionNFT(wallet, this._data.tokenAddress);
+            this._productMarketplaceAddress = await subscriptionNFT.minter();
+            if (!this._productMarketplaceAddress) return null;
+            const productMarketplace = new ProductContracts.ProductMarketplace(wallet, this._productMarketplaceAddress);
             const product = await productMarketplace.products(productId);
             const chainId = wallet.chainId;
             if (product.token && product.token === Utils.nullAddress) {
@@ -537,9 +543,8 @@ export class Model {
         }
     }
 
-    async getDiscount(productId: number, productPrice: BigNumber, discountRuleId: number) {
+    async getDiscount(promotionAddress: string, productId: number, productPrice: BigNumber, discountRuleId: number) {
         let basePrice: BigNumber = productPrice;
-        let promotionAddress = this.getContractAddress('Promotion');
         const wallet = Wallet.getClientInstance();
         const promotion = new ProductContracts.Promotion(wallet, promotionAddress);
         const index = await promotion.discountRuleIdToIndex({ param1: productId, param2: discountRuleId });
@@ -573,14 +578,14 @@ export class Model {
     
     async subscribe(startTime: number, duration: number, recipient: string, callback?: any, confirmationCallback?: any) {
         let commissionAddress = this.getContractAddress('Commission');
-        let productMarketplaceAddress = this.getContractAddress('ProductMarketplace');
         const wallet = Wallet.getClientInstance();
         const commission = new ProductContracts.Commission(wallet, commissionAddress);
-        const productMarketplace = new ProductContracts.ProductMarketplace(wallet, productMarketplaceAddress);
+        const productMarketplace = new ProductContracts.ProductMarketplace(wallet, this._productMarketplaceAddress);
         let basePrice: BigNumber = this.productInfo.price;
         let discountRuleId = this.discountApplied?.id ?? 0;
         if (discountRuleId !== 0) {
-            const discount = await this.getDiscount(this.productId, this.productInfo.price, discountRuleId);
+            const promotionAddress = await productMarketplace.promotion();
+            const discount = await this.getDiscount(promotionAddress, this.productId, this.productInfo.price, discountRuleId);
             basePrice = discount.price;
             if (discount.id === 0) discountRuleId = 0;
         }
@@ -657,9 +662,8 @@ export class Model {
     }
 
     async renewSubscription(startTime: number, duration: number, recipient: string, callback?: any, confirmationCallback?: any) {
-        let productMarketplaceAddress = this.getContractAddress('ProductMarketplace');
         const wallet = Wallet.getClientInstance();
-        const productMarketplace = new ProductContracts.ProductMarketplace(wallet, productMarketplaceAddress);
+        const productMarketplace = new ProductContracts.ProductMarketplace(wallet, this._productMarketplaceAddress);
         const subscriptionNFT = new ProductContracts.SubscriptionNFT(wallet, this.productInfo.nft);
         let nftId = await subscriptionNFT.tokenOfOwnerByIndex({
             owner: recipient,
@@ -668,7 +672,8 @@ export class Model {
         let basePrice: BigNumber = this.productInfo.price;
         let discountRuleId = this.discountApplied?.id ?? 0;
         if (discountRuleId !== 0) {
-            const discount = await this.getDiscount(this.productId, this.productInfo.price, discountRuleId);
+            const promotionAddress = await productMarketplace.promotion();
+            const discount = await this.getDiscount(promotionAddress, this.productId, this.productInfo.price, discountRuleId);
             basePrice = discount.price;
             if (discount.id === 0) discountRuleId = 0;
         }
