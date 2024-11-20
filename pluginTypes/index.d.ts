@@ -14,15 +14,11 @@ declare module "@scom/scom-subscription/interface.ts" {
         explorerTxUrl?: string;
         explorerAddressUrl?: string;
     }
-    export type ContractType = 'ProductMarketplace' | 'OneTimePurchaseNFT' | 'SubscriptionNFTFactory' | 'Promotion' | 'Commission';
+    export type ContractType = 'Commission';
     interface IContractDetailInfo {
         address: string;
     }
     export interface IContractInfo {
-        ProductMarketplace: IContractDetailInfo;
-        OneTimePurchaseNFT: IContractDetailInfo;
-        SubscriptionNFTFactory: IContractDetailInfo;
-        Promotion: IContractDetailInfo;
         Commission: IContractDetailInfo;
     }
     export type ContractInfoByChainType = {
@@ -86,35 +82,11 @@ declare module "@scom/scom-subscription/data.json.ts" {
         infuraId: string;
         contractInfo: {
             97: {
-                ProductMarketplace: {
-                    address: string;
-                };
-                OneTimePurchaseNFT: {
-                    address: string;
-                };
-                SubscriptionNFTFactory: {
-                    address: string;
-                };
-                Promotion: {
-                    address: string;
-                };
                 Commission: {
                     address: string;
                 };
             };
             43113: {
-                ProductMarketplace: {
-                    address: string;
-                };
-                OneTimePurchaseNFT: {
-                    address: string;
-                };
-                SubscriptionNFTFactory: {
-                    address: string;
-                };
-                Promotion: {
-                    address: string;
-                };
                 Commission: {
                     address: string;
                 };
@@ -125,7 +97,6 @@ declare module "@scom/scom-subscription/data.json.ts" {
 }
 /// <amd-module name="@scom/scom-subscription/model.ts" />
 declare module "@scom/scom-subscription/model.ts" {
-    import { Module } from "@ijstech/components";
     import { ContractType, IExtendedNetwork, INetworkConfig, IProductInfo, ISubscription, IWalletPlugin } from "@scom/scom-subscription/interface.ts";
     import { ISubscriptionDiscountRule, PaymentMethod, SocialDataManager } from "@scom/scom-social-sdk";
     import { BigNumber, ERC20ApprovalModel, IERC20ApprovalEventOptions, ISendTxEventsOptions, IWallet } from "@ijstech/eth-wallet";
@@ -143,15 +114,16 @@ declare module "@scom/scom-subscription/model.ts" {
         private _discountApplied;
         private _approvalModel;
         private _dataManager;
-        private module;
         private toncore;
         private tonConnectUI;
         private _isTonWalletConnected;
+        private _productMarketplaceAddress;
         onTonWalletStatusChanged: (isConnected: boolean) => void;
         onChainChanged: () => Promise<void>;
         onWalletConnected: () => Promise<void>;
         refreshDappContainer: () => void;
         updateUIBySetData: () => Promise<void>;
+        get productMarketplaceAddress(): string;
         get durationUnits(): {
             label: string;
             value: string;
@@ -185,7 +157,7 @@ declare module "@scom/scom-subscription/model.ts" {
         set productInfo(info: IProductInfo);
         get dataManager(): SocialDataManager;
         set dataManager(manager: SocialDataManager);
-        constructor(module: Module, moduleDir: string);
+        constructor(moduleDir: string);
         loadLib(moduleDir: string): Promise<unknown>;
         initTonWallet(): void;
         connectTonWallet(): Promise<void>;
@@ -228,7 +200,7 @@ declare module "@scom/scom-subscription/model.ts" {
             nftId: BigNumber;
             priceDuration: BigNumber;
         }>;
-        getDiscount(productId: number, productPrice: BigNumber, discountRuleId: number): Promise<{
+        getDiscount(promotionAddress: string, productId: number, productPrice: BigNumber, discountRuleId: number): Promise<{
             price: BigNumber;
             id: number;
         }>;
@@ -238,23 +210,8 @@ declare module "@scom/scom-subscription/model.ts" {
         constructPayload(msg: string): Promise<any>;
         tonPayment(startTime: number, endTime: number, days: number): Promise<void>;
         setApprovalModelAction(options: IERC20ApprovalEventOptions): Promise<import("@ijstech/eth-wallet").IERC20ApprovalAction>;
-        getConfigurators(): {
-            name: string;
-            target: string;
-            getActions: any;
-            getData: any;
-            setData: any;
-            getTag: any;
-            setTag: any;
-        }[];
         setData(value: ISubscription): Promise<void>;
         getData(): ISubscription;
-        getTag(): any;
-        setTag(value: any): void;
-        private updateTag;
-        private updateStyle;
-        private updateTheme;
-        private getActions;
     }
 }
 /// <amd-module name="@scom/scom-subscription" />
@@ -317,19 +274,13 @@ declare module "@scom/scom-subscription" {
         set renewalDate(value: number);
         showLoading(): void;
         hideLoading(): void;
-        getConfigurators(): {
-            name: string;
-            target: string;
-            getActions: any;
-            getData: any;
-            setData: any;
-            getTag: any;
-            setTag: any;
-        }[];
         setData(data: ISubscription): Promise<void>;
         getData(): ISubscription;
         getTag(): any;
         setTag(value: any): void;
+        private updateTheme;
+        private updateStyle;
+        private updateTag;
         private onChainChanged;
         private onWalletConnected;
         private refreshDappContainer;

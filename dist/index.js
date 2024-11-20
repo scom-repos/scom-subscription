@@ -44,35 +44,11 @@ define("@scom/scom-subscription/data.json.ts", ["require", "exports"], function 
         "infuraId": "adc596bf88b648e2a8902bc9093930c5",
         "contractInfo": {
             97: {
-                "ProductMarketplace": {
-                    "address": "0x93e684ad2AEE178e23675fbE5bA88c3e4e7467f4"
-                },
-                "OneTimePurchaseNFT": {
-                    "address": "0x5aE9c7f08572D52e2DB8508B502D767A1ECf21Bf"
-                },
-                "SubscriptionNFTFactory": {
-                    "address": "0x0055e4edb49425A29784Bd9a7986F5b56dcc8f6b"
-                },
-                "Promotion": {
-                    "address": "0x13d23201a8A6661881d701E1cF56A30A8eb0aE90"
-                },
                 "Commission": {
                     "address": "0xcdc39C8bC8F9fDAF31D79f461B47477606770c62"
                 }
             },
             43113: {
-                "ProductMarketplace": {
-                    "address": "0xeC3747eAbf71D4BDF15Abb70398C04B642363D10"
-                },
-                "OneTimePurchaseNFT": {
-                    "address": "0x404eeCC44F7aFc1f7561b2A9bC475513206D4b15"
-                },
-                "SubscriptionNFTFactory": {
-                    "address": "0x9231761Bd5f32c8f6465d82168BAdaB109D23290"
-                },
-                "Promotion": {
-                    "address": "0x22786FF4E595f1B517242549ec1D263e62dc6F26"
-                },
                 "Commission": {
                     "address": "0x2Ed01CB805e7f52c92cfE9eC02E7Dc899cA53BCa"
                 }
@@ -85,6 +61,9 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Model = void 0;
     class Model {
+        get productMarketplaceAddress() {
+            return this._productMarketplaceAddress;
+        }
         get durationUnits() {
             return [
                 {
@@ -206,7 +185,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
         set dataManager(manager) {
             this._dataManager = manager;
         }
-        constructor(module, moduleDir) {
+        constructor(moduleDir) {
             this._data = {};
             this.rpcWalletEvents = [];
             this.rpcWalletId = '';
@@ -258,7 +237,6 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                     }
                 }
             };
-            this.module = module;
             const defaultNetworkList = (0, scom_network_list_1.default)();
             this.networkMap = defaultNetworkList.reduce((acc, cur) => {
                 const explorerUrl = cur.blockExplorerUrls && cur.blockExplorerUrls.length ? cur.blockExplorerUrls[0] : "";
@@ -533,12 +511,13 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             return productId;
         }
         async fetchProductInfo(productId) {
-            let productMarketplaceAddress = this.getContractAddress('ProductMarketplace');
-            if (!productMarketplaceAddress)
-                return null;
             try {
                 const wallet = this.getRpcWallet();
-                const productMarketplace = new scom_product_contract_1.Contracts.ProductMarketplace(wallet, productMarketplaceAddress);
+                const subscriptionNFT = new scom_product_contract_1.Contracts.SubscriptionNFT(wallet, this._data.tokenAddress);
+                this._productMarketplaceAddress = await subscriptionNFT.minter();
+                if (!this._productMarketplaceAddress)
+                    return null;
+                const productMarketplace = new scom_product_contract_1.Contracts.ProductMarketplace(wallet, this._productMarketplaceAddress);
                 const product = await productMarketplace.products(productId);
                 const chainId = wallet.chainId;
                 if (product.token && product.token === eth_wallet_1.Utils.nullAddress) {
@@ -568,9 +547,8 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                 return null;
             }
         }
-        async getDiscount(productId, productPrice, discountRuleId) {
+        async getDiscount(promotionAddress, productId, productPrice, discountRuleId) {
             let basePrice = productPrice;
-            let promotionAddress = this.getContractAddress('Promotion');
             const wallet = eth_wallet_1.Wallet.getClientInstance();
             const promotion = new scom_product_contract_1.Contracts.Promotion(wallet, promotionAddress);
             const index = await promotion.discountRuleIdToIndex({ param1: productId, param2: discountRuleId });
@@ -604,14 +582,14 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
         }
         async subscribe(startTime, duration, recipient, callback, confirmationCallback) {
             let commissionAddress = this.getContractAddress('Commission');
-            let productMarketplaceAddress = this.getContractAddress('ProductMarketplace');
             const wallet = eth_wallet_1.Wallet.getClientInstance();
             const commission = new scom_product_contract_1.Contracts.Commission(wallet, commissionAddress);
-            const productMarketplace = new scom_product_contract_1.Contracts.ProductMarketplace(wallet, productMarketplaceAddress);
+            const productMarketplace = new scom_product_contract_1.Contracts.ProductMarketplace(wallet, this._productMarketplaceAddress);
             let basePrice = this.productInfo.price;
             let discountRuleId = this.discountApplied?.id ?? 0;
             if (discountRuleId !== 0) {
-                const discount = await this.getDiscount(this.productId, this.productInfo.price, discountRuleId);
+                const promotionAddress = await productMarketplace.promotion();
+                const discount = await this.getDiscount(promotionAddress, this.productId, this.productInfo.price, discountRuleId);
                 basePrice = discount.price;
                 if (discount.id === 0)
                     discountRuleId = 0;
@@ -692,9 +670,8 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             return receipt;
         }
         async renewSubscription(startTime, duration, recipient, callback, confirmationCallback) {
-            let productMarketplaceAddress = this.getContractAddress('ProductMarketplace');
             const wallet = eth_wallet_1.Wallet.getClientInstance();
-            const productMarketplace = new scom_product_contract_1.Contracts.ProductMarketplace(wallet, productMarketplaceAddress);
+            const productMarketplace = new scom_product_contract_1.Contracts.ProductMarketplace(wallet, this._productMarketplaceAddress);
             const subscriptionNFT = new scom_product_contract_1.Contracts.SubscriptionNFT(wallet, this.productInfo.nft);
             let nftId = await subscriptionNFT.tokenOfOwnerByIndex({
                 owner: recipient,
@@ -703,7 +680,8 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             let basePrice = this.productInfo.price;
             let discountRuleId = this.discountApplied?.id ?? 0;
             if (discountRuleId !== 0) {
-                const discount = await this.getDiscount(this.productId, this.productInfo.price, discountRuleId);
+                const promotionAddress = await productMarketplace.promotion();
+                const discount = await this.getDiscount(promotionAddress, this.productId, this.productInfo.price, discountRuleId);
                 basePrice = discount.price;
                 if (discount.id === 0)
                     discountRuleId = 0;
@@ -778,19 +756,6 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             let approvalModelAction = this.approvalModel.getAction();
             return approvalModelAction;
         }
-        getConfigurators() {
-            return [
-                {
-                    name: 'Builder Configurator',
-                    target: 'Builders',
-                    getActions: this.getActions.bind(this),
-                    getData: this.getData.bind(this),
-                    setData: this.setData.bind(this),
-                    getTag: this.getTag.bind(this),
-                    setTag: this.setTag.bind(this)
-                }
-            ];
-        }
         async setData(value) {
             this._data = value;
             if (this.updateUIBySetData)
@@ -798,58 +763,6 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
         }
         getData() {
             return this._data;
-        }
-        getTag() {
-            return this.module.tag;
-        }
-        setTag(value) {
-            const newValue = value || {};
-            if (!this.module.tag)
-                this.module.tag = {};
-            for (let prop in newValue) {
-                if (newValue.hasOwnProperty(prop)) {
-                    if (prop === 'light' || prop === 'dark')
-                        this.updateTag(prop, newValue[prop]);
-                    else
-                        this.module.tag[prop] = newValue[prop];
-                }
-            }
-            this.updateTheme();
-        }
-        updateTag(type, value) {
-            this.module.tag[type] = this.module.tag[type] ?? {};
-            for (let prop in value) {
-                if (value.hasOwnProperty(prop))
-                    this.module.tag[type][prop] = value[prop];
-            }
-        }
-        updateStyle(name, value) {
-            if (value) {
-                this.module.style.setProperty(name, value);
-            }
-            else {
-                this.module.style.removeProperty(name);
-            }
-        }
-        updateTheme() {
-            const themeVar = document.body.style.getPropertyValue('--theme') || 'light';
-            this.updateStyle('--text-primary', this.module.tag[themeVar]?.fontColor);
-            this.updateStyle('--text-secondary', this.module.tag[themeVar]?.secondaryColor);
-            this.updateStyle('--background-main', this.module.tag[themeVar]?.backgroundColor);
-            this.updateStyle('--colors-primary-main', this.module.tag[themeVar]?.primaryColor);
-            this.updateStyle('--colors-primary-light', this.module.tag[themeVar]?.primaryLightColor);
-            this.updateStyle('--colors-primary-dark', this.module.tag[themeVar]?.primaryDarkColor);
-            this.updateStyle('--colors-secondary-light', this.module.tag[themeVar]?.secondaryLight);
-            this.updateStyle('--colors-secondary-main', this.module.tag[themeVar]?.secondaryMain);
-            this.updateStyle('--divider', this.module.tag[themeVar]?.borderColor);
-            this.updateStyle('--action-selected', this.module.tag[themeVar]?.selected);
-            this.updateStyle('--action-selected_background', this.module.tag[themeVar]?.selectedBackground);
-            this.updateStyle('--action-hover_background', this.module.tag[themeVar]?.hoverBackground);
-            this.updateStyle('--action-hover', this.module.tag[themeVar]?.hover);
-        }
-        getActions() {
-            const actions = [];
-            return actions;
         }
     }
     exports.Model = Model;
@@ -943,9 +856,6 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             this.pnlLoading.visible = false;
             this.pnlBody.visible = true;
         }
-        getConfigurators() {
-            return this.model.getConfigurators();
-        }
         async setData(data) {
             await this.model.setData(data);
         }
@@ -956,7 +866,49 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             return this.tag;
         }
         setTag(value) {
-            this.model.setTag(value);
+            const newValue = value || {};
+            if (!this.tag)
+                this.tag = {};
+            for (let prop in newValue) {
+                if (newValue.hasOwnProperty(prop)) {
+                    if (prop === 'light' || prop === 'dark')
+                        this.updateTag(prop, newValue[prop]);
+                    else
+                        this.tag[prop] = newValue[prop];
+                }
+            }
+            this.updateTheme();
+        }
+        updateTheme() {
+            const themeVar = document.body.style.getPropertyValue('--theme') || 'light';
+            this.updateStyle('--text-primary', this.tag[themeVar]?.fontColor);
+            this.updateStyle('--text-secondary', this.tag[themeVar]?.secondaryColor);
+            this.updateStyle('--background-main', this.tag[themeVar]?.backgroundColor);
+            this.updateStyle('--colors-primary-main', this.tag[themeVar]?.primaryColor);
+            this.updateStyle('--colors-primary-light', this.tag[themeVar]?.primaryLightColor);
+            this.updateStyle('--colors-primary-dark', this.tag[themeVar]?.primaryDarkColor);
+            this.updateStyle('--colors-secondary-light', this.tag[themeVar]?.secondaryLight);
+            this.updateStyle('--colors-secondary-main', this.tag[themeVar]?.secondaryMain);
+            this.updateStyle('--divider', this.tag[themeVar]?.borderColor);
+            this.updateStyle('--action-selected', this.tag[themeVar]?.selected);
+            this.updateStyle('--action-selected_background', this.tag[themeVar]?.selectedBackground);
+            this.updateStyle('--action-hover_background', this.tag[themeVar]?.hoverBackground);
+            this.updateStyle('--action-hover', this.tag[themeVar]?.hover);
+        }
+        updateStyle(name, value) {
+            if (value) {
+                this.style.setProperty(name, value);
+            }
+            else {
+                this.style.removeProperty(name);
+            }
+        }
+        updateTag(type, value) {
+            this.tag[type] = this.tag[type] ?? {};
+            for (let prop in value) {
+                if (value.hasOwnProperty(prop))
+                    this.tag[type][prop] = value[prop];
+            }
         }
         async initApprovalAction() {
             if (!this.approvalModelAction) {
@@ -1036,7 +988,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                     contractAddress = this.model.getContractAddress('Commission');
                 }
                 else {
-                    contractAddress = this.model.getContractAddress('ProductMarketplace');
+                    contractAddress = this.model.productMarketplaceAddress;
                 }
                 this.model.approvalModel.spenderAddress = contractAddress;
             }
@@ -1052,13 +1004,13 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
         async updateEVMUI() {
             try {
                 await this.model.initWallet();
-                if (this.model.isRpcWalletConnected())
-                    await this.initApprovalAction();
                 const { chainId, tokenAddress } = this.model.getData();
                 if (!this.model.productId) {
                     this.model.productId = await this.model.getProductId(tokenAddress);
                 }
                 this.model.productInfo = await this.model.fetchProductInfo(this.model.productId);
+                if (this.model.isRpcWalletConnected())
+                    await this.initApprovalAction();
                 this.refreshDappContainer();
                 this.comboRecipient.items = this.model.recipients.map(address => ({
                     label: address,
@@ -1071,7 +1023,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                     this.detailWrapper.visible = true;
                     this.onToggleDetail();
                     this.btnDetail.visible = true;
-                    this.lblMarketplaceContract.caption = components_3.FormatUtils.truncateWalletAddress(this.model.getContractAddress('ProductMarketplace'));
+                    this.lblMarketplaceContract.caption = components_3.FormatUtils.truncateWalletAddress(this.model.productMarketplaceAddress);
                     this.lblNFTContract.caption = components_3.FormatUtils.truncateWalletAddress(tokenAddress);
                     const isNativeToken = !token.address || token.address === eth_wallet_2.Utils.nullAddress || !token.address.startsWith('0x');
                     if (isNativeToken) {
@@ -1281,7 +1233,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             this.btnDetail.rightIcon.name = isExpanding ? 'caret-down' : 'caret-up';
         }
         onViewMarketplaceContract() {
-            this.model.viewExplorerByAddress(this.model.chainId, this.model.getContractAddress('ProductMarketplace') || "");
+            this.model.viewExplorerByAddress(this.model.chainId, this.model.productMarketplaceAddress || "");
         }
         onViewNFTContract() {
             const { tokenAddress } = this.model.getData();
@@ -1302,7 +1254,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             }, 1600);
         }
         onCopyMarketplaceContract(target) {
-            components_3.application.copyToClipboard(this.model.getContractAddress('ProductMarketplace') || "");
+            components_3.application.copyToClipboard(this.model.productMarketplaceAddress || "");
             this.updateCopyIcon(target);
         }
         onCopyNFTContract(target) {
@@ -1395,7 +1347,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
         }
         init() {
             const moduleDir = this['currentModuleDir'] || path;
-            this.model = new model_1.Model(this, moduleDir);
+            this.model = new model_1.Model(moduleDir);
             super.init();
             this.model.onTonWalletStatusChanged = this.handleTonWalletStatusChanged.bind(this);
             this.model.onChainChanged = this.onChainChanged.bind(this);
