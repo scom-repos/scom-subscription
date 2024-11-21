@@ -36,6 +36,33 @@ define("@scom/scom-subscription/interface.ts", ["require", "exports"], function 
     Object.defineProperty(exports, "__esModule", { value: true });
     ;
 });
+define("@scom/scom-subscription/commonUtils.ts", ["require", "exports", "@ijstech/components"], function (require, exports, components_2) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.formatNumber = exports.getDurationInDays = void 0;
+    function getDurationInDays(duration, unit, startDate) {
+        if (unit === 'days') {
+            return duration;
+        }
+        else {
+            const dateFormat = 'YYYY-MM-DD';
+            const start = startDate ? (0, components_2.moment)(startDate.format(dateFormat), dateFormat) : (0, components_2.moment)();
+            const end = (0, components_2.moment)(start).add(duration, unit);
+            const diff = end.diff(start, 'days');
+            return diff;
+        }
+    }
+    exports.getDurationInDays = getDurationInDays;
+    function formatNumber(value, decimalFigures) {
+        if (typeof value === 'object') {
+            value = value.toFixed();
+        }
+        const minValue = '0.0000001';
+        return components_2.FormatUtils.formatNumber(value, { decimalFigures: decimalFigures !== undefined ? decimalFigures : 4, minValue, hasTrailingZero: false });
+    }
+    exports.formatNumber = formatNumber;
+    ;
+});
 define("@scom/scom-subscription/data.json.ts", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -56,39 +83,10 @@ define("@scom/scom-subscription/data.json.ts", ["require", "exports"], function 
         }
     };
 });
-define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/components", "@scom/scom-network-list", "@scom/scom-subscription/data.json.ts", "@scom/scom-social-sdk", "@ijstech/eth-wallet", "@scom/scom-product-contract", "@scom/scom-token-list"], function (require, exports, components_2, scom_network_list_1, data_json_1, scom_social_sdk_1, eth_wallet_1, scom_product_contract_1, scom_token_list_1) {
+define("@scom/scom-subscription/evmWallet.ts", ["require", "exports", "@scom/scom-wallet-modal", "@ijstech/components", "@ijstech/eth-wallet", "@scom/scom-network-list", "@scom/scom-subscription/data.json.ts"], function (require, exports, scom_wallet_modal_1, components_3, eth_wallet_1, scom_network_list_1, data_json_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.EVMModel = exports.TonModel = exports.TonUtils = void 0;
-    class TonUtils {
-        constructor(moduleDir) {
-            this.loadLib(moduleDir);
-        }
-        async loadLib(moduleDir) {
-            let self = this;
-            return new Promise((resolve, reject) => {
-                components_2.RequireJS.config({
-                    baseUrl: `${moduleDir}/lib`,
-                    paths: {
-                        'ton-core': 'ton-core',
-                    }
-                });
-                components_2.RequireJS.require(['ton-core'], function (TonCore) {
-                    self.toncore = TonCore;
-                    resolve(self.toncore);
-                });
-            });
-        }
-        constructPayload(msg) {
-            const body = this.toncore.beginCell()
-                .storeUint(0, 32)
-                .storeStringTail(msg)
-                .endCell();
-            const payload = body.toBoc().toString("base64");
-            return payload;
-        }
-    }
-    exports.TonUtils = TonUtils;
+    exports.EVMWallet = void 0;
     class EventEmitter {
         constructor() {
             this.events = {};
@@ -110,425 +108,25 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             this.events[event].forEach(listener => listener(data));
         }
     }
-    class TonModel extends EventEmitter {
-        get productMarketplaceAddress() {
-            return this._productMarketplaceAddress;
-        }
-        get durationUnits() {
-            return [
-                {
-                    label: 'Day(s)',
-                    value: 'days'
-                },
-                {
-                    label: 'Month(s)',
-                    value: 'months'
-                },
-                {
-                    label: 'Year(s)',
-                    value: 'years'
-                }
-            ];
-        }
-        get paymentMethod() {
-            if (this._data.paymentMethod) {
-                return this._data.paymentMethod;
-            }
-            else {
-                return this._data.currency === 'TON' ? scom_social_sdk_1.PaymentMethod.TON : scom_social_sdk_1.PaymentMethod.Telegram;
-            }
-        }
-        get currency() {
-            return this._data.currency;
-        }
-        get chainId() {
-            return 0;
-        }
-        get token() {
-            return this.productInfo?.token;
-        }
+    class EVMWallet extends EventEmitter {
         get wallets() {
-            return [];
-        }
-        get networks() {
-            return [];
-        }
-        get showHeader() {
-            return this._data.showHeader ?? true;
-        }
-        set showHeader(value) {
-            this._data.showHeader = value;
-        }
-        get recipient() {
-            return this._data.recipient ?? '';
-        }
-        get recipients() {
-            return this._data.recipients || [];
-        }
-        get referrer() {
-            return this._data.referrer;
-        }
-        get approvalModel() {
-            return this._approvalModel;
-        }
-        get productId() {
-            return this._data.productId;
-        }
-        set productId(value) {
-            this._data.productId = value;
-        }
-        get isRenewal() {
-            return this._data.isRenewal;
-        }
-        set isRenewal(value) {
-            this._data.isRenewal = value;
-        }
-        get renewalDate() {
-            return this._data.renewalDate;
-        }
-        set renewalDate(value) {
-            this._data.renewalDate = value;
-        }
-        get discountApplied() {
-            return this._discountApplied;
-        }
-        set discountApplied(value) {
-            this._discountApplied = value;
-        }
-        get discountRuleId() {
-            return this._data.discountRuleId;
-        }
-        set discountRuleId(value) {
-            this._data.discountRuleId = value;
-        }
-        get productInfo() {
-            return this._productInfo;
-        }
-        set productInfo(info) {
-            this._productInfo = info;
-        }
-        get dataManager() {
-            return this._dataManager || components_2.application.store?.mainDataManager;
-        }
-        set dataManager(manager) {
-            this._dataManager = manager;
-        }
-        constructor(moduleDir) {
-            super();
-            this._data = {};
-            this.updateDiscount = (duration, startDate, days) => {
-                this.discountApplied = undefined;
-                if (!this._data.discountRules?.length || !duration || !startDate)
-                    return;
-                const paymentMethod = this.paymentMethod;
-                const price = new eth_wallet_1.BigNumber(this._data.tokenAmount);
-                const durationInDays = this._data.durationInDays;
-                const startTime = startDate.unix();
-                let discountAmount;
-                for (let rule of this._data.discountRules) {
-                    if (rule.discountApplication === 0 && this.isRenewal)
-                        continue;
-                    if (rule.discountApplication === 1 && !this.isRenewal)
-                        continue;
-                    if ((rule.startTime > 0 && startTime < rule.startTime) || (rule.endTime > 0 && startTime > rule.endTime) || rule.minDuration > days)
-                        continue;
-                    let basePrice = price;
-                    if (rule.discountPercentage > 0) {
-                        basePrice = price.times(1 - rule.discountPercentage / 100);
-                    }
-                    else if (rule.fixedPrice > 0) {
-                        basePrice = new eth_wallet_1.BigNumber(rule.fixedPrice);
-                    }
-                    let tmpDiscountAmount = price.minus(basePrice).div(durationInDays).times(days);
-                    if (!this.discountApplied || tmpDiscountAmount.gt(discountAmount)) {
-                        this.discountApplied = rule;
-                        discountAmount = tmpDiscountAmount;
-                    }
-                }
-            };
-            this._tonUtils = new TonUtils(moduleDir);
-        }
-        async initWallet() {
-            throw new Error("Method not implemented.");
-        }
-        updateDappContainerData() {
-            this.emit("walletUpdated");
-        }
-        isClientWalletConnected() {
-            const wallet = eth_wallet_1.Wallet.getClientInstance();
-            return wallet.isConnected;
-        }
-        isRpcWalletConnected() {
-            return false;
-        }
-        async switchNetwork(chainId) {
-            throw new Error("Method not implemented.");
-        }
-        getNetworkInfo(chainId) {
-            return null;
-        }
-        getContractAddress(type) {
-            return '';
-        }
-        viewExplorerByAddress(chainId, address) {
-            let network = this.getNetworkInfo(chainId);
-            if (network && network.explorerAddressUrl) {
-                let url = `${network.explorerAddressUrl}${address}`;
-                window.open(url);
-            }
-        }
-        formatNumber(value, decimalFigures) {
-            if (typeof value === 'object') {
-                value = value.toFixed();
-            }
-            const minValue = '0.0000001';
-            return components_2.FormatUtils.formatNumber(value, { decimalFigures: decimalFigures !== undefined ? decimalFigures : 4, minValue, hasTrailingZero: false });
-        }
-        ;
-        getDurationInDays(duration, unit, startDate) {
-            if (unit === 'days') {
-                return duration;
-            }
-            else {
-                const dateFormat = 'YYYY-MM-DD';
-                const start = startDate ? (0, components_2.moment)(startDate.format(dateFormat), dateFormat) : (0, components_2.moment)();
-                const end = (0, components_2.moment)(start).add(duration, unit);
-                const diff = end.diff(start, 'days');
-                return diff;
-            }
-        }
-        getDiscountAndTotalAmount(days) {
-            let discountType;
-            let discountValue;
-            let discountAmount;
-            let totalAmount;
-            const price = new eth_wallet_1.BigNumber(this._data?.tokenAmount || 0);
-            let basePrice = price;
-            if (this.discountApplied) {
-                if (this.discountApplied.discountPercentage > 0) {
-                    discountValue = this.discountApplied.discountPercentage;
-                    discountType = 'Percentage';
-                    basePrice = price.times(1 - this.discountApplied.discountPercentage / 100);
-                }
-                else if (this.discountApplied.fixedPrice > 0) {
-                    discountValue = this.discountApplied.fixedPrice;
-                    discountType = 'FixedAmount';
-                    basePrice = new eth_wallet_1.BigNumber(this.discountApplied.fixedPrice);
-                }
-                if (discountType) {
-                    discountAmount = price.minus(basePrice).div(this._data.durationInDays).times(days);
-                }
-            }
-            const pricePerDay = basePrice.div(this._data?.durationInDays || 1);
-            totalAmount = pricePerDay.times(days);
-            return { discountType, discountValue, discountAmount, totalAmount };
-        }
-        async getProductId(nftAddress, nftId) {
-            return 0;
-        }
-        async fetchProductInfo(productId) {
-            return null;
-        }
-        async getDiscount(promotionAddress, productId, productPrice, discountRuleId) {
-            let basePrice = productPrice;
-            const wallet = eth_wallet_1.Wallet.getClientInstance();
-            const promotion = new scom_product_contract_1.Contracts.Promotion(wallet, promotionAddress);
-            const index = await promotion.discountRuleIdToIndex({ param1: productId, param2: discountRuleId });
-            const rule = await promotion.discountRules({ param1: productId, param2: index });
-            if (rule.discountPercentage.gt(0)) {
-                const discount = productPrice.times(rule.discountPercentage).div(100);
-                if (productPrice.gt(discount))
-                    basePrice = productPrice.minus(discount);
-            }
-            else if (rule.fixedPrice.gt(0)) {
-                basePrice = rule.fixedPrice;
-            }
-            else {
-                discountRuleId = 0;
-            }
-            return {
-                price: basePrice,
-                id: discountRuleId
-            };
-        }
-        async getSubscriptionAction(recipient) {
-            const wallet = eth_wallet_1.Wallet.getClientInstance();
-            const subscriptionNFT = new scom_product_contract_1.Contracts.SubscriptionNFT(wallet, this.productInfo.nft);
-            let nftBalance = await subscriptionNFT.balanceOf(recipient);
-            if (nftBalance.eq(0)) {
-                return this.subscribe.bind(this);
-            }
-            else {
-                return this.renewSubscription.bind(this);
-            }
-        }
-        async subscribe(startTime, duration, recipient, callback, confirmationCallback) {
-            return null;
-        }
-        async renewSubscription(startTime, duration, recipient, callback, confirmationCallback) {
-            return null;
-        }
-        getPaymentTransactionData(startTime, endTime, days) {
-            const { totalAmount } = this.getDiscountAndTotalAmount(days);
-            let subscriptionFee = totalAmount;
-            let subscriptionFeeToAddress = this._data.recipient;
-            const creatorPubkey = scom_social_sdk_1.Nip19.decode(this._data.creatorId).data;
-            const comment = `${creatorPubkey}:${this._data.communityId}:${this.dataManager.selfPubkey}:${startTime}:${endTime}`;
-            const payload = this._tonUtils.constructPayload(comment);
-            //https://ton-connect.github.io/sdk/modules/_tonconnect_ui.html#send-transaction
-            const transaction = {
-                validUntil: Math.floor(Date.now() / 1000) + 60,
-                messages: [
-                    {
-                        address: subscriptionFeeToAddress,
-                        amount: subscriptionFee.times(1e9).toFixed(),
-                        payload: payload
-                    }
-                ]
-            };
-            return transaction;
-        }
-        getBasePriceLabel() {
-            const { durationInDays, currency, tokenAmount } = this.getData();
-            const duration = durationInDays > 1 ? ` for ${durationInDays} days` : ' per day';
-            return `${tokenAmount ? this.formatNumber(tokenAmount, 6) : ""} ${currency}${duration}`;
-        }
-        async setApprovalModelAction(options) {
-            return null;
-        }
-        async setData(value) {
-            this._data = value;
-        }
-        getData() {
-            return this._data;
-        }
-    }
-    exports.TonModel = TonModel;
-    class EVMModel extends EventEmitter {
-        get productMarketplaceAddress() {
-            return this._productMarketplaceAddress;
-        }
-        get durationUnits() {
-            return [
-                {
-                    label: 'Day(s)',
-                    value: 'days'
-                },
-                {
-                    label: 'Month(s)',
-                    value: 'months'
-                },
-                {
-                    label: 'Year(s)',
-                    value: 'years'
-                }
-            ];
-        }
-        get paymentMethod() {
-            if (this._data.paymentMethod) {
-                return this._data.paymentMethod;
-            }
-            else if (this._data.chainId) {
-                return scom_social_sdk_1.PaymentMethod.EVM;
-            }
-            else {
-                return this._data.currency === 'TON' ? scom_social_sdk_1.PaymentMethod.TON : scom_social_sdk_1.PaymentMethod.Telegram;
-            }
-        }
-        get currency() {
-            if (this.paymentMethod === scom_social_sdk_1.PaymentMethod.EVM) {
-                return this.productInfo.token?.symbol;
-            }
-            else {
-                return this._data.currency;
-            }
-        }
-        get chainId() {
-            const rpcWallet = this.getRpcWallet();
-            return rpcWallet?.chainId;
-        }
-        get token() {
-            return this.productInfo?.token;
-        }
-        get wallets() {
-            return this._data.wallets ?? this.defaultWallets;
+            return this._wallets ?? this.defaultWallets;
         }
         set wallets(value) {
-            this._data.wallets = value;
+            this._wallets = value;
         }
         get networks() {
-            const nets = this._data.networks ?? this.defaultNetworks;
-            if (this._data.chainId && !nets.some(v => v.chainId === this._data.chainId)) {
-                nets.push({ chainId: this._data.chainId });
+            const nets = this._networks ?? this.defaultNetworks;
+            if (this._chainId && !nets.some(v => v.chainId === this._chainId)) {
+                nets.push({ chainId: this._chainId });
             }
             return nets;
         }
         set networks(value) {
-            this._data.networks = value;
+            this._networks = value;
         }
-        get showHeader() {
-            return this._data.showHeader ?? true;
-        }
-        set showHeader(value) {
-            this._data.showHeader = value;
-        }
-        get recipient() {
-            return this._data.recipient ?? '';
-        }
-        get recipients() {
-            return this._data.recipients || [];
-        }
-        get referrer() {
-            return this._data.referrer;
-        }
-        get approvalModel() {
-            return this._approvalModel;
-        }
-        get productId() {
-            return this._data.productId;
-        }
-        set productId(value) {
-            this._data.productId = value;
-        }
-        get isRenewal() {
-            return this._data.isRenewal;
-        }
-        set isRenewal(value) {
-            this._data.isRenewal = value;
-        }
-        get renewalDate() {
-            return this._data.renewalDate;
-        }
-        set renewalDate(value) {
-            this._data.renewalDate = value;
-        }
-        get discountApplied() {
-            return this._discountApplied;
-        }
-        set discountApplied(value) {
-            this._discountApplied = value;
-        }
-        get discountRuleId() {
-            return this._data.discountRuleId;
-        }
-        set discountRuleId(value) {
-            this._data.discountRuleId = value;
-        }
-        get productInfo() {
-            return this._productInfo;
-        }
-        set productInfo(info) {
-            this._productInfo = info;
-        }
-        get dataManager() {
-            return this._dataManager || components_2.application.store?.mainDataManager;
-        }
-        set dataManager(manager) {
-            this._dataManager = manager;
-        }
-        constructor(moduleDir) {
+        constructor() {
             super();
-            this._data = {};
             this.rpcWalletEvents = [];
             this.rpcWalletId = '';
             this.infuraId = '';
@@ -550,46 +148,15 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             };
             this.getDappContainerData = () => {
                 const rpcWallet = this.getRpcWallet();
-                const { chainId, defaultChainId } = this.getData();
-                const _chainId = chainId || rpcWallet?.chainId;
+                const chainId = this._chainId || rpcWallet?.chainId;
                 const containerData = {
-                    defaultChainId: chainId || defaultChainId,
+                    defaultChainId: this._chainId || this.defaultChainId,
                     wallets: this.wallets,
-                    networks: _chainId ? [{ chainId: _chainId }] : this.networks,
-                    showHeader: this.showHeader,
-                    rpcWalletId: rpcWallet.instanceId
+                    networks: chainId ? [{ chainId: chainId }] : this.networks,
+                    rpcWalletId: rpcWallet.instanceId,
+                    showHeader: true
                 };
                 return containerData;
-            };
-            this.updateDiscount = (duration, startDate, days) => {
-                this.discountApplied = undefined;
-                if (!this._data.discountRules?.length || !duration || !startDate)
-                    return;
-                const paymentMethod = this.paymentMethod;
-                const price = eth_wallet_1.Utils.fromDecimals(this.productInfo.price, this.productInfo.token.decimals);
-                const durationInDays = this.productInfo.priceDuration.div(86400);
-                const startTime = startDate.unix();
-                let discountAmount;
-                for (let rule of this._data.discountRules) {
-                    if (rule.discountApplication === 0 && this.isRenewal)
-                        continue;
-                    if (rule.discountApplication === 1 && !this.isRenewal)
-                        continue;
-                    if ((rule.startTime > 0 && startTime < rule.startTime) || (rule.endTime > 0 && startTime > rule.endTime) || rule.minDuration > days)
-                        continue;
-                    let basePrice = price;
-                    if (rule.discountPercentage > 0) {
-                        basePrice = price.times(1 - rule.discountPercentage / 100);
-                    }
-                    else if (rule.fixedPrice > 0) {
-                        basePrice = new eth_wallet_1.BigNumber(rule.fixedPrice);
-                    }
-                    let tmpDiscountAmount = price.minus(basePrice).div(durationInDays).times(days);
-                    if (!this.discountApplied || tmpDiscountAmount.gt(discountAmount)) {
-                        this.discountApplied = rule;
-                        discountAmount = tmpDiscountAmount;
-                    }
-                }
             };
             const defaultNetworkList = (0, scom_network_list_1.default)();
             this.networkMap = defaultNetworkList.reduce((acc, cur) => {
@@ -609,6 +176,13 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             }
             this.defaultNetworks = this.contractInfoByChain ? Object.keys(this.contractInfoByChain).map(chainId => ({ chainId: Number(chainId) })) : [];
         }
+        setData(data) {
+            const { wallets, networks, chainId, defaultChainId } = data;
+            this.wallets = wallets;
+            this.networks = networks;
+            this._chainId = chainId;
+            this.defaultChainId = defaultChainId || 0;
+        }
         async initWallet() {
             try {
                 await eth_wallet_1.Wallet.getClientInstance().init();
@@ -625,12 +199,12 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                 return this.rpcWalletId;
             }
             const clientWallet = eth_wallet_1.Wallet.getClientInstance();
-            const networkList = Object.values(components_2.application.store?.networkMap || this.networkMap || []);
+            const networkList = Object.values(components_3.application.store?.networkMap || this.networkMap || []);
             const instanceId = clientWallet.initRpcWallet({
                 networks: networkList,
                 defaultChainId,
-                infuraId: components_2.application.store?.infuraId,
-                multicalls: components_2.application.store?.multicalls
+                infuraId: components_3.application.store?.infuraId,
+                multicalls: components_3.application.store?.multicalls
             });
             this.rpcWalletId = instanceId;
             if (clientWallet.address) {
@@ -641,7 +215,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
         }
         async resetRpcWallet() {
             this.removeRpcWalletEvents();
-            this.initRpcWallet(this._data.chainId || this._data.defaultChainId);
+            this.initRpcWallet(this._chainId || this.defaultChainId);
             const rpcWallet = this.getRpcWallet();
             const chainChangedEvent = rpcWallet.registerWalletEvent(this, eth_wallet_1.Constants.RpcWalletEvent.ChainChanged, async (chainId) => {
                 this.emit("chainChanged");
@@ -660,13 +234,30 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
         getRpcWallet() {
             return this.rpcWalletId ? eth_wallet_1.Wallet.getRpcWalletInstance(this.rpcWalletId) : null;
         }
-        isClientWalletConnected() {
+        async connectWallet(modalContainer) {
+            if (!this.mdEVMWallet) {
+                await components_3.application.loadPackage('@scom/scom-wallet-modal', '*');
+                this.mdEVMWallet = new scom_wallet_modal_1.default();
+                modalContainer.append(this.mdEVMWallet);
+            }
+            await this.mdEVMWallet.setData({
+                networks: this.networks,
+                wallets: this.wallets
+            });
+            this.mdEVMWallet.showModal();
+        }
+        isWalletConnected() {
             const wallet = eth_wallet_1.Wallet.getClientInstance();
             return wallet.isConnected;
         }
-        isRpcWalletConnected() {
+        isNetworkConnected() {
             const wallet = this.getRpcWallet();
             return wallet?.isConnected;
+        }
+        getContractAddress(type) {
+            const rpcWallet = this.getRpcWallet();
+            const contracts = this.contractInfoByChain[rpcWallet.chainId] || {};
+            return contracts[type]?.address;
         }
         async switchNetwork(chainId) {
             const wallet = eth_wallet_1.Wallet.getClientInstance();
@@ -675,10 +266,6 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
         getNetworkInfo(chainId) {
             return this.networkMap[chainId];
         }
-        getContractAddress(type) {
-            const contracts = this.contractInfoByChain[this.chainId] || {};
-            return contracts[type]?.address;
-        }
         viewExplorerByAddress(chainId, address) {
             let network = this.getNetworkInfo(chainId);
             if (network && network.explorerAddressUrl) {
@@ -686,8 +273,375 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                 window.open(url);
             }
         }
+    }
+    exports.EVMWallet = EVMWallet;
+});
+define("@scom/scom-subscription/tonWallet.ts", ["require", "exports", "@ijstech/components"], function (require, exports, components_4) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.TonWallet = void 0;
+    class TonWallet {
+        constructor(moduleDir, onTonWalletStatusChanged) {
+            this._isWalletConnected = false;
+            this.loadLib(moduleDir);
+            this._onTonWalletStatusChanged = onTonWalletStatusChanged;
+            this.initWallet();
+        }
+        get isWalletConnected() {
+            return this._isWalletConnected;
+        }
+        async loadLib(moduleDir) {
+            let self = this;
+            return new Promise((resolve, reject) => {
+                components_4.RequireJS.config({
+                    baseUrl: `${moduleDir}/lib`,
+                    paths: {
+                        'ton-core': 'ton-core',
+                    }
+                });
+                components_4.RequireJS.require(['ton-core'], function (TonCore) {
+                    self.toncore = TonCore;
+                    resolve(self.toncore);
+                });
+            });
+        }
+        initWallet() {
+            try {
+                let UI = window['TON_CONNECT_UI'];
+                if (!this.tonConnectUI) {
+                    this.tonConnectUI = new UI.TonConnectUI({
+                        manifestUrl: 'https://ton.noto.fan/tonconnect/manifest.json',
+                        buttonRootId: 'pnlHeader'
+                    });
+                }
+                this.tonConnectUI.connectionRestored.then(async (restored) => {
+                    this._isWalletConnected = this.tonConnectUI.connected;
+                    if (this._onTonWalletStatusChanged)
+                        this._onTonWalletStatusChanged(this._isWalletConnected);
+                });
+                this.tonConnectUI.onStatusChange((walletAndwalletInfo) => {
+                    this._isWalletConnected = !!walletAndwalletInfo;
+                    if (this._onTonWalletStatusChanged)
+                        this._onTonWalletStatusChanged(this._isWalletConnected);
+                });
+            }
+            catch (err) {
+                // alert(err)
+                console.log(err);
+            }
+        }
+        async connectWallet() {
+            try {
+                await this.tonConnectUI.openModal();
+            }
+            catch (err) {
+                alert(err);
+            }
+        }
+        async sendTransaction(txData) {
+            return await this.tonConnectUI.sendTransaction(txData);
+        }
+        constructPayload(msg) {
+            const body = this.toncore.beginCell()
+                .storeUint(0, 32)
+                .storeStringTail(msg)
+                .endCell();
+            const payload = body.toBoc().toString("base64");
+            return payload;
+        }
+    }
+    exports.TonWallet = TonWallet;
+});
+define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/components", "@scom/scom-network-list", "@scom/scom-social-sdk", "@ijstech/eth-wallet", "@scom/scom-product-contract", "@scom/scom-token-list", "@scom/scom-subscription/commonUtils.ts"], function (require, exports, components_5, scom_network_list_2, scom_social_sdk_1, eth_wallet_2, scom_product_contract_1, scom_token_list_1, commonUtils_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.EVMModel = exports.TonModel = void 0;
+    class TonModel {
+        get productMarketplaceAddress() {
+            return this._productMarketplaceAddress;
+        }
+        get paymentMethod() {
+            if (this._data.paymentMethod) {
+                return this._data.paymentMethod;
+            }
+            else {
+                return this._data.currency === 'TON' ? scom_social_sdk_1.PaymentMethod.TON : scom_social_sdk_1.PaymentMethod.Telegram;
+            }
+        }
+        get currency() {
+            return this._data.currency;
+        }
+        get token() {
+            return this.productInfo?.token;
+        }
+        get recipient() {
+            return this._data.recipient ?? '';
+        }
+        get recipients() {
+            return this._data.recipients || [];
+        }
+        get referrer() {
+            return this._data.referrer;
+        }
+        get productId() {
+            return this._data.productId;
+        }
+        set productId(value) {
+            this._data.productId = value;
+        }
+        get isRenewal() {
+            return this._data.isRenewal;
+        }
+        set isRenewal(value) {
+            this._data.isRenewal = value;
+        }
+        get renewalDate() {
+            return this._data.renewalDate;
+        }
+        set renewalDate(value) {
+            this._data.renewalDate = value;
+        }
+        get discountApplied() {
+            return this._discountApplied;
+        }
+        set discountApplied(value) {
+            this._discountApplied = value;
+        }
+        get discountRuleId() {
+            return this._data.discountRuleId;
+        }
+        set discountRuleId(value) {
+            this._data.discountRuleId = value;
+        }
+        get productInfo() {
+            return this._productInfo;
+        }
+        set productInfo(info) {
+            this._productInfo = info;
+        }
+        get dataManager() {
+            return this._dataManager || components_5.application.store?.mainDataManager;
+        }
+        set dataManager(manager) {
+            this._dataManager = manager;
+        }
+        constructor(tonWallet) {
+            this._data = {};
+            this.updateDiscount = (duration, startDate, days) => {
+                this.discountApplied = undefined;
+                if (!this._data.discountRules?.length || !duration || !startDate)
+                    return;
+                const paymentMethod = this.paymentMethod;
+                const price = new eth_wallet_2.BigNumber(this._data.tokenAmount);
+                const durationInDays = this._data.durationInDays;
+                const startTime = startDate.unix();
+                let discountAmount;
+                for (let rule of this._data.discountRules) {
+                    if (rule.discountApplication === 0 && this.isRenewal)
+                        continue;
+                    if (rule.discountApplication === 1 && !this.isRenewal)
+                        continue;
+                    if ((rule.startTime > 0 && startTime < rule.startTime) || (rule.endTime > 0 && startTime > rule.endTime) || rule.minDuration > days)
+                        continue;
+                    let basePrice = price;
+                    if (rule.discountPercentage > 0) {
+                        basePrice = price.times(1 - rule.discountPercentage / 100);
+                    }
+                    else if (rule.fixedPrice > 0) {
+                        basePrice = new eth_wallet_2.BigNumber(rule.fixedPrice);
+                    }
+                    let tmpDiscountAmount = price.minus(basePrice).div(durationInDays).times(days);
+                    if (!this.discountApplied || tmpDiscountAmount.gt(discountAmount)) {
+                        this.discountApplied = rule;
+                        discountAmount = tmpDiscountAmount;
+                    }
+                }
+            };
+            this.tonWallet = tonWallet;
+        }
+        getDiscountAndTotalAmount(days) {
+            let discountType;
+            let discountValue;
+            let discountAmount;
+            let totalAmount;
+            const price = new eth_wallet_2.BigNumber(this._data?.tokenAmount || 0);
+            let basePrice = price;
+            if (this.discountApplied) {
+                if (this.discountApplied.discountPercentage > 0) {
+                    discountValue = this.discountApplied.discountPercentage;
+                    discountType = 'Percentage';
+                    basePrice = price.times(1 - this.discountApplied.discountPercentage / 100);
+                }
+                else if (this.discountApplied.fixedPrice > 0) {
+                    discountValue = this.discountApplied.fixedPrice;
+                    discountType = 'FixedAmount';
+                    basePrice = new eth_wallet_2.BigNumber(this.discountApplied.fixedPrice);
+                }
+                if (discountType) {
+                    discountAmount = price.minus(basePrice).div(this._data.durationInDays).times(days);
+                }
+            }
+            const pricePerDay = basePrice.div(this._data?.durationInDays || 1);
+            totalAmount = pricePerDay.times(days);
+            return { discountType, discountValue, discountAmount, totalAmount };
+        }
+        async getProductId(nftAddress, nftId) {
+            return 0;
+        }
+        async fetchProductInfo(productId) {
+            return null;
+        }
+        async getSubscriptionAction(recipient) {
+            if (this.isRenewal) {
+                return this.renewSubscription.bind(this);
+            }
+            else {
+                return this.subscribe.bind(this);
+            }
+        }
+        async subscribe(options) {
+            const { startTime, endTime, days } = options;
+            const txData = this.getPaymentTransactionData(startTime, endTime, days);
+            return await this.tonWallet.sendTransaction(txData);
+        }
+        async renewSubscription(options) {
+            const { startTime, endTime, days } = options;
+            const txData = this.getPaymentTransactionData(startTime, endTime, days);
+            return await this.tonWallet.sendTransaction(txData);
+        }
+        getPaymentTransactionData(startTime, endTime, days) {
+            const { totalAmount } = this.getDiscountAndTotalAmount(days);
+            let subscriptionFee = totalAmount;
+            let subscriptionFeeToAddress = this._data.recipient;
+            const creatorPubkey = scom_social_sdk_1.Nip19.decode(this._data.creatorId).data;
+            const comment = `${creatorPubkey}:${this._data.communityId}:${this.dataManager.selfPubkey}:${startTime}:${endTime}`;
+            const payload = this.tonWallet.constructPayload(comment);
+            //https://ton-connect.github.io/sdk/modules/_tonconnect_ui.html#send-transaction
+            const transaction = {
+                validUntil: Math.floor(Date.now() / 1000) + 60,
+                messages: [
+                    {
+                        address: subscriptionFeeToAddress,
+                        amount: subscriptionFee.times(1e9).toFixed(),
+                        payload: payload
+                    }
+                ]
+            };
+            return transaction;
+        }
+        getBasePriceLabel() {
+            const { durationInDays, currency, tokenAmount } = this.getData();
+            const duration = durationInDays > 1 ? ` for ${durationInDays} days` : ' per day';
+            return `${tokenAmount ? (0, commonUtils_1.formatNumber)(tokenAmount, 6) : ""} ${currency}${duration}`;
+        }
+        async setData(value) {
+            this._data = value;
+        }
+        getData() {
+            return this._data;
+        }
+    }
+    exports.TonModel = TonModel;
+    class EVMModel {
+        get productMarketplaceAddress() {
+            return this._productMarketplaceAddress;
+        }
+        get paymentMethod() {
+            return scom_social_sdk_1.PaymentMethod.EVM;
+        }
+        get currency() {
+            return this.productInfo.token?.symbol;
+        }
+        get token() {
+            return this.productInfo?.token;
+        }
+        get recipient() {
+            return this._data.recipient ?? '';
+        }
+        get recipients() {
+            return this._data.recipients || [];
+        }
+        get referrer() {
+            return this._data.referrer;
+        }
+        get productId() {
+            return this._data.productId;
+        }
+        set productId(value) {
+            this._data.productId = value;
+        }
+        get isRenewal() {
+            return this._data.isRenewal;
+        }
+        set isRenewal(value) {
+            this._data.isRenewal = value;
+        }
+        get renewalDate() {
+            return this._data.renewalDate;
+        }
+        set renewalDate(value) {
+            this._data.renewalDate = value;
+        }
+        get discountApplied() {
+            return this._discountApplied;
+        }
+        set discountApplied(value) {
+            this._discountApplied = value;
+        }
+        get discountRuleId() {
+            return this._data.discountRuleId;
+        }
+        set discountRuleId(value) {
+            this._data.discountRuleId = value;
+        }
+        get productInfo() {
+            return this._productInfo;
+        }
+        set productInfo(info) {
+            this._productInfo = info;
+        }
+        get dataManager() {
+            return this._dataManager || components_5.application.store?.mainDataManager;
+        }
+        set dataManager(manager) {
+            this._dataManager = manager;
+        }
+        constructor(evmWallet) {
+            this._data = {};
+            this.updateDiscount = (duration, startDate, days) => {
+                this.discountApplied = undefined;
+                if (!this._data.discountRules?.length || !duration || !startDate)
+                    return;
+                const paymentMethod = this.paymentMethod;
+                const price = eth_wallet_2.Utils.fromDecimals(this.productInfo.price, this.productInfo.token.decimals);
+                const durationInDays = this.productInfo.priceDuration.div(86400);
+                const startTime = startDate.unix();
+                let discountAmount;
+                for (let rule of this._data.discountRules) {
+                    if (rule.discountApplication === 0 && this.isRenewal)
+                        continue;
+                    if (rule.discountApplication === 1 && !this.isRenewal)
+                        continue;
+                    if ((rule.startTime > 0 && startTime < rule.startTime) || (rule.endTime > 0 && startTime > rule.endTime) || rule.minDuration > days)
+                        continue;
+                    let basePrice = price;
+                    if (rule.discountPercentage > 0) {
+                        basePrice = price.times(1 - rule.discountPercentage / 100);
+                    }
+                    else if (rule.fixedPrice > 0) {
+                        basePrice = new eth_wallet_2.BigNumber(rule.fixedPrice);
+                    }
+                    let tmpDiscountAmount = price.minus(basePrice).div(durationInDays).times(days);
+                    if (!this.discountApplied || tmpDiscountAmount.gt(discountAmount)) {
+                        this.discountApplied = rule;
+                        discountAmount = tmpDiscountAmount;
+                    }
+                }
+            };
+            this._evmWallet = evmWallet;
+        }
         registerSendTxEvents(sendTxEventHandlers) {
-            const wallet = eth_wallet_1.Wallet.getClientInstance();
+            const wallet = eth_wallet_2.Wallet.getClientInstance();
             wallet.registerSendTxEvents({
                 transactionHash: (error, receipt) => {
                     if (sendTxEventHandlers.transactionHash) {
@@ -700,26 +654,6 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                     }
                 },
             });
-        }
-        formatNumber(value, decimalFigures) {
-            if (typeof value === 'object') {
-                value = value.toFixed();
-            }
-            const minValue = '0.0000001';
-            return components_2.FormatUtils.formatNumber(value, { decimalFigures: decimalFigures !== undefined ? decimalFigures : 4, minValue, hasTrailingZero: false });
-        }
-        ;
-        getDurationInDays(duration, unit, startDate) {
-            if (unit === 'days') {
-                return duration;
-            }
-            else {
-                const dateFormat = 'YYYY-MM-DD';
-                const start = startDate ? (0, components_2.moment)(startDate.format(dateFormat), dateFormat) : (0, components_2.moment)();
-                const end = (0, components_2.moment)(start).add(duration, unit);
-                const diff = end.diff(start, 'days');
-                return diff;
-            }
         }
         getDiscountAndTotalAmount(days) {
             let discountType;
@@ -737,21 +671,21 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                 else if (this.discountApplied.fixedPrice > 0) {
                     discountValue = this.discountApplied.fixedPrice;
                     discountType = 'FixedAmount';
-                    basePrice = new eth_wallet_1.BigNumber(this.discountApplied.fixedPrice);
+                    basePrice = new eth_wallet_2.BigNumber(this.discountApplied.fixedPrice);
                 }
                 if (discountType) {
                     const discountAmountRaw = price.minus(basePrice).div(this.productInfo.priceDuration.div(86400)).times(days);
-                    discountAmount = eth_wallet_1.Utils.fromDecimals(discountAmountRaw, this.productInfo.token.decimals);
+                    discountAmount = eth_wallet_2.Utils.fromDecimals(discountAmountRaw, this.productInfo.token.decimals);
                 }
             }
             const pricePerDay = basePrice.div(this.productInfo.priceDuration.div(86400));
             const amountRaw = pricePerDay.times(days);
-            totalAmount = eth_wallet_1.Utils.fromDecimals(amountRaw, this.productInfo.token.decimals);
+            totalAmount = eth_wallet_2.Utils.fromDecimals(amountRaw, this.productInfo.token.decimals);
             return { discountType, discountValue, discountAmount, totalAmount };
         }
         async getTokenInfo(address, chainId) {
             let token;
-            const wallet = eth_wallet_1.Wallet.getClientInstance();
+            const wallet = eth_wallet_2.Wallet.getClientInstance();
             wallet.chainId = chainId;
             const isValidAddress = wallet.isAddress(address);
             if (isValidAddress) {
@@ -772,7 +706,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
         async getProductId(nftAddress, nftId) {
             let productId;
             try {
-                const wallet = this.getRpcWallet();
+                const wallet = this._evmWallet.getRpcWallet();
                 if (nftId != null) {
                     const oneTimePurchaseNFT = new scom_product_contract_1.Contracts.OneTimePurchaseNFT(wallet, nftAddress);
                     productId = (await oneTimePurchaseNFT.productIdByTokenId(nftId)).toNumber();
@@ -789,7 +723,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
         }
         async fetchProductInfo(productId) {
             try {
-                const wallet = this.getRpcWallet();
+                const wallet = this._evmWallet.getRpcWallet();
                 const subscriptionNFT = new scom_product_contract_1.Contracts.SubscriptionNFT(wallet, this._data.tokenAddress);
                 this._productMarketplaceAddress = await subscriptionNFT.minter();
                 if (!this._productMarketplaceAddress)
@@ -797,8 +731,8 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                 const productMarketplace = new scom_product_contract_1.Contracts.ProductMarketplace(wallet, this._productMarketplaceAddress);
                 const product = await productMarketplace.products(productId);
                 const chainId = wallet.chainId;
-                if (product.token && product.token === eth_wallet_1.Utils.nullAddress) {
-                    let net = (0, scom_network_list_1.default)().find(net => net.chainId === chainId);
+                if (product.token && product.token === eth_wallet_2.Utils.nullAddress) {
+                    let net = (0, scom_network_list_2.default)().find(net => net.chainId === chainId);
                     return {
                         ...product,
                         token: {
@@ -826,7 +760,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
         }
         async getDiscount(promotionAddress, productId, productPrice, discountRuleId) {
             let basePrice = productPrice;
-            const wallet = eth_wallet_1.Wallet.getClientInstance();
+            const wallet = eth_wallet_2.Wallet.getClientInstance();
             const promotion = new scom_product_contract_1.Contracts.Promotion(wallet, promotionAddress);
             const index = await promotion.discountRuleIdToIndex({ param1: productId, param2: discountRuleId });
             const rule = await promotion.discountRules({ param1: productId, param2: index });
@@ -847,7 +781,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             };
         }
         async getSubscriptionAction(recipient) {
-            const wallet = eth_wallet_1.Wallet.getClientInstance();
+            const wallet = eth_wallet_2.Wallet.getClientInstance();
             const subscriptionNFT = new scom_product_contract_1.Contracts.SubscriptionNFT(wallet, this.productInfo.nft);
             let nftBalance = await subscriptionNFT.balanceOf(recipient);
             if (nftBalance.eq(0)) {
@@ -857,9 +791,10 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                 return this.renewSubscription.bind(this);
             }
         }
-        async subscribe(startTime, duration, recipient, callback, confirmationCallback) {
-            let commissionAddress = this.getContractAddress('Commission');
-            const wallet = eth_wallet_1.Wallet.getClientInstance();
+        async subscribe(options) {
+            const { startTime, duration, recipient, callback, confirmationCallback } = options;
+            let commissionAddress = this._evmWallet.getContractAddress('Commission');
+            const wallet = eth_wallet_2.Wallet.getClientInstance();
             const commission = new scom_product_contract_1.Contracts.Commission(wallet, commissionAddress);
             const productMarketplace = new scom_product_contract_1.Contracts.ProductMarketplace(wallet, this._productMarketplaceAddress);
             let basePrice = this.productInfo.price;
@@ -877,8 +812,8 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                 let campaign = await commission.getCampaign({ campaignId: this.productId, returnArrays: true });
                 const affiliates = (campaign?.affiliates || []).map(a => a.toLowerCase());
                 if (affiliates.includes(this.referrer.toLowerCase())) {
-                    const commissionRate = eth_wallet_1.Utils.fromDecimals(campaign.commissionRate, 6);
-                    tokenInAmount = new eth_wallet_1.BigNumber(amount).dividedBy(new eth_wallet_1.BigNumber(1).minus(commissionRate)).decimalPlaces(0, eth_wallet_1.BigNumber.ROUND_DOWN);
+                    const commissionRate = eth_wallet_2.Utils.fromDecimals(campaign.commissionRate, 6);
+                    tokenInAmount = new eth_wallet_2.BigNumber(amount).dividedBy(new eth_wallet_2.BigNumber(1).minus(commissionRate)).decimalPlaces(0, eth_wallet_2.BigNumber.ROUND_DOWN);
                 }
             }
             let receipt;
@@ -887,7 +822,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                     transactionHash: callback,
                     confirmation: confirmationCallback
                 });
-                if (this.productInfo.token.address === eth_wallet_1.Utils.nullAddress) {
+                if (this.productInfo.token.address === eth_wallet_2.Utils.nullAddress) {
                     if (!tokenInAmount || tokenInAmount.isZero()) {
                         receipt = await productMarketplace.subscribe({
                             to: recipient || wallet.address,
@@ -946,8 +881,9 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             }
             return receipt;
         }
-        async renewSubscription(startTime, duration, recipient, callback, confirmationCallback) {
-            const wallet = eth_wallet_1.Wallet.getClientInstance();
+        async renewSubscription(options) {
+            const { startTime, duration, recipient, callback, confirmationCallback } = options;
+            const wallet = eth_wallet_2.Wallet.getClientInstance();
             const productMarketplace = new scom_product_contract_1.Contracts.ProductMarketplace(wallet, this._productMarketplaceAddress);
             const subscriptionNFT = new scom_product_contract_1.Contracts.SubscriptionNFT(wallet, this.productInfo.nft);
             let nftId = await subscriptionNFT.tokenOfOwnerByIndex({
@@ -970,7 +906,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                     transactionHash: callback,
                     confirmation: confirmationCallback
                 });
-                if (this.productInfo.token.address === eth_wallet_1.Utils.nullAddress) {
+                if (this.productInfo.token.address === eth_wallet_2.Utils.nullAddress) {
                     receipt = await productMarketplace.renewSubscription({
                         productId: this.productId,
                         nftId: nftId,
@@ -998,20 +934,10 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
         }
         getBasePriceLabel() {
             const { token, price, priceDuration } = this.productInfo;
-            const productPrice = eth_wallet_1.Utils.fromDecimals(price, token.decimals).toFixed();
+            const productPrice = eth_wallet_2.Utils.fromDecimals(price, token.decimals).toFixed();
             const days = Math.ceil((priceDuration?.toNumber() || 0) / 86400);
             const duration = days > 1 ? ` for ${days} days` : ' per day';
-            return `${productPrice ? this.formatNumber(productPrice, 6) : ""} ${token?.symbol || ""}${duration}`;
-        }
-        async setApprovalModelAction(options) {
-            const approvalOptions = {
-                ...options,
-                spenderAddress: ''
-            };
-            let wallet = this.getRpcWallet();
-            this._approvalModel = new eth_wallet_1.ERC20ApprovalModel(wallet, approvalOptions);
-            let approvalModelAction = this.approvalModel.getAction();
-            return approvalModelAction;
+            return `${productPrice ? (0, commonUtils_1.formatNumber)(productPrice, 6) : ""} ${token?.symbol || ""}${duration}`;
         }
         async setData(value) {
             this._data = value;
@@ -1022,91 +948,18 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
     }
     exports.EVMModel = EVMModel;
 });
-define("@scom/scom-subscription/tonWallet.ts", ["require", "exports", "@ijstech/components"], function (require, exports, components_3) {
+define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", "@ijstech/eth-wallet", "@scom/scom-social-sdk", "@scom/scom-subscription/index.css.ts", "@scom/scom-subscription/model.ts", "@scom/scom-subscription/evmWallet.ts", "@scom/scom-subscription/tonWallet.ts", "@scom/scom-subscription/commonUtils.ts"], function (require, exports, components_6, eth_wallet_3, scom_social_sdk_2, index_css_1, model_1, evmWallet_1, tonWallet_1, commonUtils_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.TonWallet = void 0;
-    class TonWallet {
-        constructor(moduleDir, onTonWalletStatusChanged) {
-            this._isWalletConnected = false;
-            this.loadLib(moduleDir);
-            this._onTonWalletStatusChanged = onTonWalletStatusChanged;
-            this.initWallet();
-        }
-        get isWalletConnected() {
-            return this._isWalletConnected;
-        }
-        async loadLib(moduleDir) {
-            let self = this;
-            return new Promise((resolve, reject) => {
-                components_3.RequireJS.config({
-                    baseUrl: `${moduleDir}/lib`,
-                    paths: {
-                        'ton-core': 'ton-core',
-                    }
-                });
-                components_3.RequireJS.require(['ton-core'], function (TonCore) {
-                    self.toncore = TonCore;
-                    resolve(self.toncore);
-                });
-            });
-        }
-        initWallet() {
-            try {
-                let UI = window['TON_CONNECT_UI'];
-                if (!this.tonConnectUI) {
-                    this.tonConnectUI = new UI.TonConnectUI({
-                        manifestUrl: 'https://ton.noto.fan/tonconnect/manifest.json',
-                        buttonRootId: 'pnlHeader'
-                    });
-                }
-                this.tonConnectUI.connectionRestored.then(async (restored) => {
-                    this._isWalletConnected = this.tonConnectUI.connected;
-                    if (this._onTonWalletStatusChanged)
-                        this._onTonWalletStatusChanged(this._isWalletConnected);
-                });
-                this.tonConnectUI.onStatusChange((walletAndwalletInfo) => {
-                    this._isWalletConnected = !!walletAndwalletInfo;
-                    if (this._onTonWalletStatusChanged)
-                        this._onTonWalletStatusChanged(this._isWalletConnected);
-                });
-            }
-            catch (err) {
-                // alert(err)
-                console.log(err);
-            }
-        }
-        async connectWallet() {
-            try {
-                await this.tonConnectUI.openModal();
-            }
-            catch (err) {
-                alert(err);
-            }
-        }
-        async sendTransaction(txData) {
-            return await this.tonConnectUI.sendTransaction(txData);
-        }
-    }
-    exports.TonWallet = TonWallet;
-});
-define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", "@ijstech/eth-wallet", "@scom/scom-social-sdk", "@scom/scom-subscription/index.css.ts", "@scom/scom-subscription/model.ts", "@scom/scom-subscription/tonWallet.ts"], function (require, exports, components_4, eth_wallet_2, scom_social_sdk_2, index_css_1, model_1, tonWallet_1) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    const Theme = components_4.Styles.Theme.ThemeVars;
-    const path = components_4.application.currentModuleDir;
-    let ScomSubscription = class ScomSubscription extends components_4.Module {
+    const Theme = components_6.Styles.Theme.ThemeVars;
+    const path = components_6.application.currentModuleDir;
+    let ScomSubscription = class ScomSubscription extends components_6.Module {
         constructor() {
             super(...arguments);
             this.isApproving = false;
             this.tokenAmountIn = '0';
-            this.onChainChanged = async () => {
-                if (this.model.isRpcWalletConnected())
-                    await this.initApprovalAction();
-                this.determineBtnSubmitCaption();
-            };
-            this.onWalletConnected = async () => {
-                if (this.model.isRpcWalletConnected())
+            this.onEVMWalletConnected = async () => {
+                if (this.evmWallet.isNetworkConnected())
                     await this.initApprovalAction();
                 this.determineBtnSubmitCaption();
             };
@@ -1130,14 +983,22 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                 this.txStatusModal.message = { ...params };
                 this.txStatusModal.showModal();
             };
-            this.connectWallet = async () => {
-                if (this.mdWallet) {
-                    await components_4.application.loadPackage('@scom/scom-wallet-modal', '*');
-                    this.mdWallet.networks = this.model.networks;
-                    this.mdWallet.wallets = this.model.wallets;
-                    this.mdWallet.showModal();
+        }
+        get durationUnits() {
+            return [
+                {
+                    label: 'Day(s)',
+                    value: 'days'
+                },
+                {
+                    label: 'Month(s)',
+                    value: 'months'
+                },
+                {
+                    label: 'Year(s)',
+                    value: 'years'
                 }
-            };
+            ];
         }
         get duration() {
             return Number(this.edtDuration.value) || 0;
@@ -1157,7 +1018,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
         set renewalDate(value) {
             this.model.renewalDate = value;
             if (this.edtStartDate) {
-                this.edtStartDate.value = value > 0 ? (0, components_4.moment)(value * 1000) : (0, components_4.moment)();
+                this.edtStartDate.value = value > 0 ? (0, components_6.moment)(value * 1000) : (0, components_6.moment)();
                 this.handleDurationChanged();
             }
         }
@@ -1172,26 +1033,36 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
         async setData(data) {
             const moduleDir = this['currentModuleDir'] || path;
             if (data.paymentMethod === scom_social_sdk_2.PaymentMethod.EVM) {
-                this.model = new model_1.EVMModel(moduleDir);
+                if (!this.evmWallet) {
+                    this.evmWallet = new evmWallet_1.EVMWallet();
+                    this.evmWallet.on("chainChanged", this.onEVMWalletConnected.bind(this));
+                    this.evmWallet.on("walletConnected", this.onEVMWalletConnected.bind(this));
+                    this.evmWallet.on("walletUpdated", (data) => {
+                        this.refreshDappContainer(data);
+                    });
+                }
+                this.evmWallet.setData({
+                    wallets: data.wallets,
+                    networks: data.networks,
+                    chainId: data.chainId,
+                    defaultChainId: data.defaultChainId
+                });
+                this.model = new model_1.EVMModel(this.evmWallet);
             }
             else {
-                this.model = new model_1.TonModel(moduleDir);
-                this.tonWallet = new tonWallet_1.TonWallet(moduleDir, this.handleTonWalletStatusChanged.bind(this));
+                if (!this.tonWallet) {
+                    this.tonWallet = new tonWallet_1.TonWallet(moduleDir, this.handleTonWalletStatusChanged.bind(this));
+                }
+                this.model = new model_1.TonModel(this.tonWallet);
             }
-            this.model.on("chainChanged", this.onChainChanged.bind(this));
-            this.model.on("walletConnected", this.onWalletConnected.bind(this));
-            this.model.on("walletUpdated", (data) => {
-                this.refreshDappContainer(data);
-            });
             this.handleDurationChanged = this.handleDurationChanged.bind(this);
-            const durationUnits = this.model.durationUnits;
-            this.comboDurationUnit.items = durationUnits;
-            this.comboDurationUnit.selectedItem = durationUnits[0];
+            this.comboDurationUnit.items = this.durationUnits;
+            this.comboDurationUnit.selectedItem = this.durationUnits[0];
             await this.model.setData(data);
             this.showLoading();
             this.edtStartDate.value = undefined;
             this.edtDuration.value = '';
-            this.comboDurationUnit.selectedItem = this.model.durationUnits[0];
+            this.comboDurationUnit.selectedItem = this.durationUnits[0];
             await this.refreshDApp();
             this.hideLoading();
         }
@@ -1246,15 +1117,25 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                     this.tag[type][prop] = value[prop];
             }
         }
+        async setApprovalModelAction(options) {
+            const approvalOptions = {
+                ...options,
+                spenderAddress: ''
+            };
+            let wallet = this.evmWallet.getRpcWallet();
+            this.approvalModel = new eth_wallet_3.ERC20ApprovalModel(wallet, approvalOptions);
+            let approvalModelAction = this.approvalModel.getAction();
+            return approvalModelAction;
+        }
         async initApprovalAction() {
             if (!this.approvalModelAction) {
-                this.approvalModelAction = await this.model.setApprovalModelAction({
+                this.approvalModelAction = await this.setApprovalModelAction({
                     sender: this,
                     payAction: async () => {
                         await this.doSubmitAction();
                     },
                     onToBeApproved: async (token) => {
-                        this.btnApprove.visible = this.model.isClientWalletConnected() && this.model.isRpcWalletConnected();
+                        this.btnApprove.visible = this.evmWallet.isWalletConnected() && this.evmWallet.isNetworkConnected();
                         this.btnSubmit.visible = !this.btnApprove.visible;
                         this.btnSubmit.enabled = false;
                         if (!this.isApproving) {
@@ -1269,7 +1150,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                         this.btnSubmit.visible = true;
                         this.isApproving = false;
                         const duration = Number(this.edtDuration.value) || 0;
-                        this.btnSubmit.enabled = new eth_wallet_2.BigNumber(this.tokenAmountIn).gt(0) && Number.isInteger(duration);
+                        this.btnSubmit.enabled = new eth_wallet_3.BigNumber(this.tokenAmountIn).gt(0) && Number.isInteger(duration);
                         this.determineBtnSubmitCaption();
                     },
                     onApproving: async (token, receipt) => {
@@ -1312,7 +1193,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                     }
                 });
                 this.updateContractAddress();
-                if (this.model?.token?.address !== eth_wallet_2.Utils.nullAddress && this.tokenAmountIn) {
+                if (this.model?.token?.address !== eth_wallet_3.Utils.nullAddress && this.tokenAmountIn && new eth_wallet_3.BigNumber(this.tokenAmountIn).gt(0)) {
                     this.approvalModelAction.checkAllowance(this.model.token, this.tokenAmountIn);
                 }
             }
@@ -1321,25 +1202,25 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             if (this.approvalModelAction) {
                 let contractAddress;
                 if (this.model.referrer) {
-                    contractAddress = this.model.getContractAddress('Commission');
+                    contractAddress = this.evmWallet.getContractAddress('Commission');
                 }
                 else {
                     contractAddress = this.model.productMarketplaceAddress;
                 }
-                this.model.approvalModel.spenderAddress = contractAddress;
+                this.approvalModel.spenderAddress = contractAddress;
             }
         }
         async updateEVMUI() {
             try {
-                await this.model.initWallet();
+                await this.evmWallet.initWallet();
                 const { chainId, tokenAddress } = this.model.getData();
                 if (!this.model.productId) {
                     this.model.productId = await this.model.getProductId(tokenAddress);
                 }
                 this.model.productInfo = await this.model.fetchProductInfo(this.model.productId);
-                if (this.model.isRpcWalletConnected())
+                if (this.evmWallet.isNetworkConnected())
                     await this.initApprovalAction();
-                this.model.updateDappContainerData();
+                this.evmWallet.updateDappContainerData();
                 this.comboRecipient.items = this.model.recipients.map(address => ({
                     label: address,
                     value: address
@@ -1351,11 +1232,11 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                     this.detailWrapper.visible = true;
                     this.onToggleDetail();
                     this.btnDetail.visible = true;
-                    this.lblMarketplaceContract.caption = components_4.FormatUtils.truncateWalletAddress(this.model.productMarketplaceAddress);
-                    this.lblNFTContract.caption = components_4.FormatUtils.truncateWalletAddress(tokenAddress);
-                    const isNativeToken = !token.address || token.address === eth_wallet_2.Utils.nullAddress || !token.address.startsWith('0x');
+                    this.lblMarketplaceContract.caption = components_6.FormatUtils.truncateWalletAddress(this.model.productMarketplaceAddress);
+                    this.lblNFTContract.caption = components_6.FormatUtils.truncateWalletAddress(tokenAddress);
+                    const isNativeToken = !token.address || token.address === eth_wallet_3.Utils.nullAddress || !token.address.startsWith('0x');
                     if (isNativeToken) {
-                        const network = this.model.getNetworkInfo(chainId);
+                        const network = this.evmWallet.getNetworkInfo(chainId);
                         this.lblToken.caption = `${network?.chainName || ''} Native Token`;
                         this.lblToken.textDecoration = 'none';
                         this.lblToken.font = { size: '1rem', color: Theme.text.primary };
@@ -1364,7 +1245,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                         this.lblToken.onClick = () => { };
                     }
                     else {
-                        this.lblToken.caption = components_4.FormatUtils.truncateWalletAddress(token.address);
+                        this.lblToken.caption = components_6.FormatUtils.truncateWalletAddress(token.address);
                         this.lblToken.textDecoration = 'underline';
                         this.lblToken.font = { size: '1rem', color: Theme.colors.primary.main };
                         this.lblToken.classList.add(index_css_1.linkStyle);
@@ -1378,7 +1259,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
         }
         updateSpotsRemaining() {
             if (this.model.productId >= 0) {
-                const remaining = this.model.formatNumber(this.model.productInfo.quantity, 0);
+                const remaining = (0, commonUtils_2.formatNumber)(this.model.productInfo.quantity, 0);
                 this.lblRemaining.caption = remaining;
                 this.lblSpotsRemaining.caption = this.model.productInfo.quantity.gt(0) ? `&#128293; Hurry! Only [ ${remaining} NFTs Left ] &#128293;` : 'SOLD OUT';
                 this.lblSpotsRemaining.font = { bold: true, size: '1rem', color: this.model.productInfo.quantity.gt(0) ? Theme.text.primary : Theme.colors.error.dark };
@@ -1410,7 +1291,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                 this.pnlDetail.visible = isEVM;
                 this.determineBtnSubmitCaption();
                 this.chkCustomStartDate.checked = false;
-                this.edtStartDate.value = this.isRenewal && this.renewalDate ? (0, components_4.moment)(this.renewalDate * 1000) : (0, components_4.moment)();
+                this.edtStartDate.value = this.isRenewal && this.renewalDate ? (0, components_6.moment)(this.renewalDate * 1000) : (0, components_6.moment)();
                 this.edtStartDate.enabled = false;
                 this.pnlCustomStartDate.visible = !this.isRenewal;
                 this.lblStartDate.caption = this.isRenewal ? this.edtStartDate.value.format('DD/MM/YYYY hh:mm A') : "Now";
@@ -1418,28 +1299,27 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                 this.lblBasePrice.caption = this.model.getBasePriceLabel();
                 this.btnSubmit.visible = !isTelegram;
                 const rule = discountRuleId ? discountRules.find(rule => rule.id === discountRuleId) : null;
-                const isExpired = rule && rule.endTime && rule.endTime < (0, components_4.moment)().unix();
+                const isExpired = rule && rule.endTime && rule.endTime < (0, components_6.moment)().unix();
                 if (isExpired)
                     this.model.discountRuleId = undefined;
                 if (rule && !isExpired) {
                     if (!this.isRenewal && rule.startTime && rule.startTime > this.edtStartDate.value.unix()) {
-                        this.edtStartDate.value = (0, components_4.moment)(rule.startTime * 1000);
+                        this.edtStartDate.value = (0, components_6.moment)(rule.startTime * 1000);
                     }
                     this.edtDuration.value = rule.minDuration || "1";
-                    this.comboDurationUnit.selectedItem = this.model.durationUnits[0];
+                    this.comboDurationUnit.selectedItem = this.durationUnits[0];
                     this.model.discountApplied = rule;
                     this._updateEndDate();
                     this._updateTotalAmount();
-                    if (this.tonWallet.isWalletConnected) {
-                        this.btnSubmit.enabled = this.edtDuration.value && this.duration > 0 && Number.isInteger(this.duration);
-                    }
                 }
                 else {
                     this.edtDuration.value = durationInDays || "";
                     this.handleDurationChanged();
                 }
             }
-            catch (error) { }
+            catch (error) {
+                console.log('error', error);
+            }
         }
         handleTonWalletStatusChanged(isConnected) {
             if (isConnected) {
@@ -1453,11 +1333,11 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
         determineBtnSubmitCaption() {
             const paymentMethod = this.model.paymentMethod;
             if (paymentMethod === scom_social_sdk_2.PaymentMethod.EVM) {
-                if (!this.model.isClientWalletConnected()) {
+                if (!this.evmWallet.isWalletConnected()) {
                     this.btnSubmit.caption = 'Connect Wallet';
                     this.btnSubmit.enabled = true;
                 }
-                else if (!this.model.isRpcWalletConnected()) {
+                else if (!this.evmWallet.isNetworkConnected()) {
                     this.btnSubmit.caption = 'Switch Network';
                     this.btnSubmit.enabled = true;
                 }
@@ -1480,26 +1360,26 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                 return;
             }
             const dateFormat = 'YYYY-MM-DD hh:mm A';
-            const startDate = (0, components_4.moment)(this.edtStartDate.value.format(dateFormat), dateFormat);
+            const startDate = (0, components_6.moment)(this.edtStartDate.value.format(dateFormat), dateFormat);
             this.lblEndDate.caption = startDate.add(this.duration, this.durationUnit).format('DD/MM/YYYY hh:mm A');
         }
         _updateDiscount() {
-            const days = this.model.getDurationInDays(this.duration, this.durationUnit, this.edtStartDate.value);
+            const days = (0, commonUtils_2.getDurationInDays)(this.duration, this.durationUnit, this.edtStartDate.value);
             this.model.updateDiscount(this.duration, this.edtStartDate.value, days);
         }
         _updateTotalAmount() {
             const currency = this.model.currency;
             if (!this.duration)
                 this.lblOrderTotal.caption = `0 ${currency || ''}`;
-            const days = this.model.getDurationInDays(this.duration, this.durationUnit, this.edtStartDate.value);
+            const days = (0, commonUtils_2.getDurationInDays)(this.duration, this.durationUnit, this.edtStartDate.value);
             const { discountType, discountValue, discountAmount, totalAmount } = this.model.getDiscountAndTotalAmount(days);
             this.pnlDiscount.visible = discountType != null;
             if (this.pnlDiscount.visible) {
                 this.lblDiscount.caption = discountType === 'Percentage' ? `Discount (${discountValue}%)` : 'Discount';
-                this.lblDiscountAmount.caption = `-${this.model.formatNumber(discountAmount, 6)} ${currency || ''}`;
+                this.lblDiscountAmount.caption = `-${(0, commonUtils_2.formatNumber)(discountAmount, 6)} ${currency || ''}`;
             }
             this.tokenAmountIn = totalAmount.toFixed();
-            this.lblOrderTotal.caption = `${this.model.formatNumber(totalAmount, 6)} ${currency || ''}`;
+            this.lblOrderTotal.caption = `${(0, commonUtils_2.formatNumber)(totalAmount, 6)} ${currency || ''}`;
             if (this.approvalModelAction) {
                 this.approvalModelAction.checkAllowance(this.model.token, this.tokenAmountIn);
             }
@@ -1507,7 +1387,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
         handleCustomCheckboxChange() {
             const isChecked = this.chkCustomStartDate.checked;
             this.edtStartDate.enabled = isChecked;
-            const now = (0, components_4.moment)();
+            const now = (0, components_6.moment)();
             if (isChecked) {
                 if (this.edtStartDate.value.isBefore(now)) {
                     this.edtStartDate.value = now;
@@ -1530,9 +1410,6 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             this._updateEndDate();
             this._updateDiscount();
             this._updateTotalAmount();
-            if (this.tonWallet.isWalletConnected) {
-                this.btnSubmit.enabled = this.edtDuration.value && this.duration > 0 && Number.isInteger(this.duration);
-            }
         }
         handleDurationUnitChanged() {
             this._updateEndDate();
@@ -1546,15 +1423,18 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             this.btnDetail.rightIcon.name = isExpanding ? 'caret-down' : 'caret-up';
         }
         onViewMarketplaceContract() {
-            this.model.viewExplorerByAddress(this.model.chainId, this.model.productMarketplaceAddress || "");
+            const rpcWallet = this.evmWallet.getRpcWallet();
+            this.evmWallet.viewExplorerByAddress(rpcWallet.chainId, this.model.productMarketplaceAddress || "");
         }
         onViewNFTContract() {
             const { tokenAddress } = this.model.getData();
-            this.model.viewExplorerByAddress(this.model.chainId, tokenAddress);
+            const rpcWallet = this.evmWallet.getRpcWallet();
+            this.evmWallet.viewExplorerByAddress(rpcWallet.chainId, tokenAddress);
         }
         onViewToken() {
             const token = this.model.token;
-            this.model.viewExplorerByAddress(this.model.chainId, token.address || token.symbol);
+            const rpcWallet = this.evmWallet.getRpcWallet();
+            this.evmWallet.viewExplorerByAddress(rpcWallet.chainId, token.address || token.symbol);
         }
         updateCopyIcon(icon) {
             if (icon.name === 'check')
@@ -1567,17 +1447,17 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             }, 1600);
         }
         onCopyMarketplaceContract(target) {
-            components_4.application.copyToClipboard(this.model.productMarketplaceAddress || "");
+            components_6.application.copyToClipboard(this.model.productMarketplaceAddress || "");
             this.updateCopyIcon(target);
         }
         onCopyNFTContract(target) {
             const { tokenAddress } = this.model.getData();
-            components_4.application.copyToClipboard(tokenAddress);
+            components_6.application.copyToClipboard(tokenAddress);
             this.updateCopyIcon(target);
         }
         onCopyToken(target) {
             const token = this.model.token;
-            components_4.application.copyToClipboard(token.address || token.symbol);
+            components_6.application.copyToClipboard(token.address || token.symbol);
             this.updateCopyIcon(target);
         }
         async onApprove() {
@@ -1589,9 +1469,9 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             this.btnSubmit.rightIcon.visible = submitting;
         }
         async doSubmitAction() {
-            const days = this.model.getDurationInDays(this.duration, this.durationUnit, this.edtStartDate.value);
+            const days = (0, commonUtils_2.getDurationInDays)(this.duration, this.durationUnit, this.edtStartDate.value);
             if (!this.isRenewal && !this.chkCustomStartDate.checked) {
-                this.edtStartDate.value = (0, components_4.moment)();
+                this.edtStartDate.value = (0, components_6.moment)();
             }
             const recipient = this.comboRecipient.selectedItem?.value;
             try {
@@ -1604,6 +1484,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                 }
                 this.updateSubmitButton(true);
                 const startTime = this.edtStartDate.value.unix();
+                const endTime = components_6.moment.unix(startTime).add(this.duration, this.durationUnit).unix();
                 const duration = days * 86400;
                 const callback = (error, receipt) => {
                     if (error) {
@@ -1617,7 +1498,15 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                         this.onSubscribed();
                 };
                 const action = await this.model.getSubscriptionAction(recipient);
-                await action(startTime, duration, recipient, callback, confirmationCallback);
+                await action({
+                    startTime,
+                    endTime,
+                    days,
+                    duration,
+                    recipient,
+                    callback,
+                    confirmationCallback
+                });
             }
             catch (error) {
                 this.showTxStatusModal('error', error);
@@ -1627,12 +1516,13 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
         async onSubmit() {
             const paymentMethod = this.model.paymentMethod;
             if (paymentMethod === scom_social_sdk_2.PaymentMethod.EVM) {
-                if (!this.model.isClientWalletConnected()) {
-                    this.connectWallet();
+                if (!this.evmWallet.isWalletConnected()) {
+                    this.evmWallet.connectWallet(this.pnlEVMWallet);
                     return;
                 }
-                if (!this.model.isRpcWalletConnected()) {
-                    await this.model.switchNetwork(this.model.chainId);
+                if (!this.evmWallet.isNetworkConnected()) {
+                    const rpcWallet = this.evmWallet.getRpcWallet();
+                    await this.evmWallet.switchNetwork(rpcWallet.chainId);
                     return;
                 }
                 this.showTxStatusModal('warning', 'Confirming');
@@ -1643,20 +1533,9 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                     this.tonWallet.connectWallet();
                     return;
                 }
-                try {
-                    this.updateSubmitButton(true);
-                    const startTime = this.edtStartDate.value.unix();
-                    const endTime = components_4.moment.unix(startTime).add(this.duration, this.durationUnit).unix();
-                    const days = this.model.getDurationInDays(this.duration, this.durationUnit, this.edtStartDate.value);
-                    const txData = this.model.getPaymentTransactionData(startTime, endTime, days);
-                    await this.tonWallet.sendTransaction(txData);
-                    if (this.onSubscribed)
-                        this.onSubscribed();
-                }
-                catch (error) {
-                    this.showTxStatusModal('error', error);
-                }
-                this.updateSubmitButton(false);
+                await this.doSubmitAction();
+                if (this.onSubscribed)
+                    this.onSubscribed();
             }
         }
         init() {
@@ -1728,12 +1607,12 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                                     this.$render("i-stack", { direction: "vertical", width: "100%", justifyContent: "center", alignItems: "center", margin: { top: '0.5rem' }, gap: 8 },
                                         this.$render("i-button", { id: "btnApprove", width: '100%', caption: "Approve", padding: { top: '1rem', bottom: '1rem', left: '1rem', right: '1rem' }, font: { size: '1rem', color: Theme.colors.primary.contrastText, bold: true }, rightIcon: { visible: false, fill: Theme.colors.primary.contrastText }, background: { color: Theme.background.gradient }, border: { radius: 12 }, visible: false, onClick: this.onApprove }),
                                         this.$render("i-button", { id: 'btnSubmit', width: '100%', caption: 'Subscribe', padding: { top: '1rem', bottom: '1rem', left: '1rem', right: '1rem' }, font: { size: '1rem', color: Theme.colors.primary.contrastText, bold: true }, rightIcon: { visible: false, fill: Theme.colors.primary.contrastText }, background: { color: Theme.background.gradient }, border: { radius: 12 }, enabled: false, onClick: this.onSubmit }))))),
-                        this.$render("i-scom-wallet-modal", { id: "mdWallet", wallets: [] }),
+                        this.$render("i-panel", { id: "pnlEVMWallet" }),
                         this.$render("i-scom-tx-status-modal", { id: "txStatusModal" })))));
         }
     };
     ScomSubscription = __decorate([
-        (0, components_4.customElements)('i-scom-subscription')
+        (0, components_6.customElements)('i-scom-subscription')
     ], ScomSubscription);
     exports.default = ScomSubscription;
 });

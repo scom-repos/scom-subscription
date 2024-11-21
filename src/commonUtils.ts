@@ -1,5 +1,17 @@
-import { FormatUtils } from "@ijstech/application";
+import { FormatUtils, moment } from "@ijstech/components";
 import { BigNumber } from "@ijstech/eth-wallet";
+
+function getDurationInDays(duration: number, unit: 'days' | 'months' | 'years', startDate: any) {
+    if (unit === 'days') {
+        return duration;
+    } else {
+        const dateFormat = 'YYYY-MM-DD';
+        const start = startDate ? moment(startDate.format(dateFormat), dateFormat) : moment();
+        const end = moment(start).add(duration, unit);
+        const diff = end.diff(start, 'days');
+        return diff;
+    }
+}
 
 function formatNumber(value: number | string | BigNumber, decimalFigures?: number) {
     if (typeof value === 'object') {
@@ -10,5 +22,6 @@ function formatNumber(value: number | string | BigNumber, decimalFigures?: numbe
 };
 
 export {
+    getDurationInDays,
     formatNumber
 }

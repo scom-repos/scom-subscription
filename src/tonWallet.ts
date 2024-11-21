@@ -70,4 +70,13 @@ export class TonWallet {
     async sendTransaction(txData: any) {
         return await this.tonConnectUI.sendTransaction(txData);
     }
+
+    constructPayload(msg: string) {
+        const body = this.toncore.beginCell()
+            .storeUint(0, 32)
+            .storeStringTail(msg)
+            .endCell();
+        const payload = body.toBoc().toString("base64");
+        return payload;
+    }
 }

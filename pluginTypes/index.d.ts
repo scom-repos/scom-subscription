@@ -76,6 +76,13 @@ declare module "@scom/scom-subscription/interface.ts" {
         chainId: number;
     }
 }
+/// <amd-module name="@scom/scom-subscription/commonUtils.ts" />
+declare module "@scom/scom-subscription/commonUtils.ts" {
+    import { BigNumber } from "@ijstech/eth-wallet";
+    function getDurationInDays(duration: number, unit: 'days' | 'months' | 'years', startDate: any): number;
+    function formatNumber(value: number | string | BigNumber, decimalFigures?: number): string;
+    export { getDurationInDays, formatNumber };
+}
 /// <amd-module name="@scom/scom-subscription/data.json.ts" />
 declare module "@scom/scom-subscription/data.json.ts" {
     const _default: {
@@ -95,52 +102,103 @@ declare module "@scom/scom-subscription/data.json.ts" {
     };
     export default _default;
 }
-/// <amd-module name="@scom/scom-subscription/model.ts" />
-declare module "@scom/scom-subscription/model.ts" {
-    import { ContractType, IExtendedNetwork, INetworkConfig, IProductInfo, ISubscription, IWalletPlugin } from "@scom/scom-subscription/interface.ts";
-    import { ISubscriptionDiscountRule, PaymentMethod, SocialDataManager } from "@scom/scom-social-sdk";
-    import { BigNumber, ERC20ApprovalModel, IERC20ApprovalEventOptions, IRpcWallet, ISendTxEventsOptions } from "@ijstech/eth-wallet";
-    import { ITokenObject } from "@scom/scom-token-list";
-    export interface ITonUtils {
-        constructPayload(msg: string): string;
-    }
-    export class TonUtils implements ITonUtils {
-        private toncore;
-        constructor(moduleDir: string);
-        loadLib(moduleDir: string): Promise<unknown>;
-        constructPayload(msg: string): any;
-    }
+/// <amd-module name="@scom/scom-subscription/evmWallet.ts" />
+declare module "@scom/scom-subscription/evmWallet.ts" {
+    import { Component } from "@ijstech/components";
+    import { ContractType, IExtendedNetwork, INetworkConfig, IWalletPlugin } from "@scom/scom-subscription/interface.ts";
     class EventEmitter {
         private events;
         on(event: string, listener: Function): void;
         off(event: string, listener: Function): void;
         emit(event: string, data?: any): void;
     }
-    export class TonModel extends EventEmitter {
+    export class EVMWallet extends EventEmitter {
+        private mdEVMWallet;
+        private _wallets;
+        private _networks;
+        private rpcWalletEvents;
+        private rpcWalletId;
+        private defaultChainId;
+        private _chainId;
+        private infuraId;
+        private defaultNetworks;
+        private defaultWallets;
+        private contractInfoByChain;
+        private networkMap;
+        get wallets(): IWalletPlugin[];
+        set wallets(value: IWalletPlugin[]);
+        get networks(): INetworkConfig[];
+        set networks(value: INetworkConfig[]);
+        constructor();
+        setData(data: {
+            wallets: IWalletPlugin[];
+            networks: INetworkConfig[];
+            chainId: number;
+            defaultChainId: number;
+        }): void;
+        initWallet(): Promise<void>;
+        private removeRpcWalletEvents;
+        private initRpcWallet;
+        resetRpcWallet(): Promise<void>;
+        private getDappContainerData;
+        updateDappContainerData(): void;
+        getRpcWallet(): import("@ijstech/eth-wallet").IRpcWallet;
+        connectWallet(modalContainer: Component): Promise<void>;
+        isWalletConnected(): boolean;
+        isNetworkConnected(): boolean;
+        getContractAddress(type: ContractType): any;
+        switchNetwork(chainId: number): Promise<void>;
+        getNetworkInfo(chainId: number): IExtendedNetwork;
+        viewExplorerByAddress(chainId: number, address: string): void;
+    }
+}
+/// <amd-module name="@scom/scom-subscription/tonWallet.ts" />
+declare module "@scom/scom-subscription/tonWallet.ts" {
+    export class TonWallet {
+        private toncore;
+        private tonConnectUI;
+        private _isWalletConnected;
+        private _onTonWalletStatusChanged;
+        constructor(moduleDir: string, onTonWalletStatusChanged: (isConnected: boolean) => void);
+        get isWalletConnected(): boolean;
+        loadLib(moduleDir: string): Promise<unknown>;
+        initWallet(): void;
+        connectWallet(): Promise<void>;
+        sendTransaction(txData: any): Promise<any>;
+        constructPayload(msg: string): any;
+    }
+}
+/// <amd-module name="@scom/scom-subscription/model.ts" />
+declare module "@scom/scom-subscription/model.ts" {
+    import { IProductInfo, ISubscription } from "@scom/scom-subscription/interface.ts";
+    import { ISubscriptionDiscountRule, PaymentMethod, SocialDataManager } from "@scom/scom-social-sdk";
+    import { BigNumber, ISendTxEventsOptions } from "@ijstech/eth-wallet";
+    import { ITokenObject } from "@scom/scom-token-list";
+    import { EVMWallet } from "@scom/scom-subscription/evmWallet.ts";
+    import { TonWallet } from "@scom/scom-subscription/tonWallet.ts";
+    export interface ISubscriptionActionOptions {
+        startTime: number;
+        endTime?: number;
+        days?: number;
+        duration?: number;
+        recipient?: string;
+        callback?: any;
+        confirmationCallback?: any;
+    }
+    export class TonModel {
         private _data;
         private _productInfo;
         private _discountApplied;
-        private _approvalModel;
         private _dataManager;
-        private _tonUtils;
+        private tonWallet;
         private _productMarketplaceAddress;
         get productMarketplaceAddress(): string;
-        get durationUnits(): {
-            label: string;
-            value: string;
-        }[];
         get paymentMethod(): PaymentMethod;
         get currency(): string;
-        get chainId(): number;
         get token(): ITokenObject;
-        get wallets(): any[];
-        get networks(): any[];
-        get showHeader(): boolean;
-        set showHeader(value: boolean);
         get recipient(): string;
         get recipients(): string[];
         get referrer(): string;
-        get approvalModel(): ERC20ApprovalModel;
         get productId(): number;
         set productId(value: number);
         get isRenewal(): boolean;
@@ -155,17 +213,7 @@ declare module "@scom/scom-subscription/model.ts" {
         set productInfo(info: IProductInfo);
         get dataManager(): SocialDataManager;
         set dataManager(manager: SocialDataManager);
-        constructor(moduleDir: string);
-        initWallet(): Promise<void>;
-        updateDappContainerData(): void;
-        isClientWalletConnected(): boolean;
-        isRpcWalletConnected(): boolean;
-        switchNetwork(chainId: number): Promise<void>;
-        getNetworkInfo(chainId: number): any;
-        getContractAddress(type: ContractType): string;
-        viewExplorerByAddress(chainId: number, address: string): void;
-        formatNumber(value: number | string | BigNumber, decimalFigures?: number): string;
-        getDurationInDays(duration: number, unit: 'days' | 'months' | 'years', startDate: any): number;
+        constructor(tonWallet: TonWallet);
         updateDiscount: (duration: number, startDate: any, days: number) => void;
         getDiscountAndTotalAmount(days: number): {
             discountType: "Percentage" | "FixedAmount";
@@ -175,59 +223,35 @@ declare module "@scom/scom-subscription/model.ts" {
         };
         getProductId(nftAddress: string, nftId?: number): Promise<number>;
         fetchProductInfo(productId: number): Promise<any>;
-        getDiscount(promotionAddress: string, productId: number, productPrice: BigNumber, discountRuleId: number): Promise<{
-            price: BigNumber;
-            id: number;
-        }>;
         getSubscriptionAction(recipient: string): Promise<any>;
-        subscribe(startTime: number, duration: number, recipient: string, callback?: any, confirmationCallback?: any): Promise<any>;
-        renewSubscription(startTime: number, duration: number, recipient: string, callback?: any, confirmationCallback?: any): Promise<any>;
+        subscribe(options: ISubscriptionActionOptions): Promise<any>;
+        renewSubscription(options: ISubscriptionActionOptions): Promise<any>;
         getPaymentTransactionData(startTime: number, endTime: number, days: number): {
             validUntil: number;
             messages: {
                 address: string;
                 amount: string;
-                payload: string;
+                payload: any;
             }[];
         };
         getBasePriceLabel(): string;
-        setApprovalModelAction(options: IERC20ApprovalEventOptions): Promise<any>;
         setData(value: ISubscription): Promise<void>;
         getData(): ISubscription;
     }
-    export class EVMModel extends EventEmitter {
+    export class EVMModel {
         private _data;
         private _productInfo;
-        private rpcWalletEvents;
-        private rpcWalletId;
-        private infuraId;
-        private defaultNetworks;
-        private defaultWallets;
-        private contractInfoByChain;
-        private networkMap;
         private _discountApplied;
-        private _approvalModel;
         private _dataManager;
         private _productMarketplaceAddress;
+        private _evmWallet;
         get productMarketplaceAddress(): string;
-        get durationUnits(): {
-            label: string;
-            value: string;
-        }[];
         get paymentMethod(): PaymentMethod;
         get currency(): string;
-        get chainId(): number;
         get token(): ITokenObject;
-        get wallets(): IWalletPlugin[];
-        set wallets(value: IWalletPlugin[]);
-        get networks(): INetworkConfig[];
-        set networks(value: INetworkConfig[]);
-        get showHeader(): boolean;
-        set showHeader(value: boolean);
         get recipient(): string;
         get recipients(): string[];
         get referrer(): string;
-        get approvalModel(): ERC20ApprovalModel;
         get productId(): number;
         set productId(value: number);
         get isRenewal(): boolean;
@@ -242,23 +266,8 @@ declare module "@scom/scom-subscription/model.ts" {
         set productInfo(info: IProductInfo);
         get dataManager(): SocialDataManager;
         set dataManager(manager: SocialDataManager);
-        constructor(moduleDir: string);
-        initWallet(): Promise<void>;
-        private removeRpcWalletEvents;
-        private initRpcWallet;
-        resetRpcWallet(): Promise<void>;
-        updateDappContainerData(): void;
-        private getDappContainerData;
-        getRpcWallet(): IRpcWallet;
-        isClientWalletConnected(): boolean;
-        isRpcWalletConnected(): boolean;
-        switchNetwork(chainId: number): Promise<void>;
-        getNetworkInfo(chainId: number): IExtendedNetwork;
-        getContractAddress(type: ContractType): any;
-        viewExplorerByAddress(chainId: number, address: string): void;
+        constructor(evmWallet: EVMWallet);
         registerSendTxEvents(sendTxEventHandlers: ISendTxEventsOptions): void;
-        formatNumber(value: number | string | BigNumber, decimalFigures?: number): string;
-        getDurationInDays(duration: number, unit: 'days' | 'months' | 'years', startDate: any): number;
         updateDiscount: (duration: number, startDate: any, days: number) => void;
         getDiscountAndTotalAmount(days: number): {
             discountType: "Percentage" | "FixedAmount";
@@ -287,81 +296,46 @@ declare module "@scom/scom-subscription/model.ts" {
             id: number;
         }>;
         getSubscriptionAction(recipient: string): Promise<any>;
-        subscribe(startTime: number, duration: number, recipient: string, callback?: any, confirmationCallback?: any): Promise<any>;
-        renewSubscription(startTime: number, duration: number, recipient: string, callback?: any, confirmationCallback?: any): Promise<any>;
+        subscribe(options: ISubscriptionActionOptions): Promise<any>;
+        renewSubscription(options: ISubscriptionActionOptions): Promise<any>;
         getPaymentTransactionData(startTime: number, endTime: number, days: number): void;
         getBasePriceLabel(): string;
-        setApprovalModelAction(options: IERC20ApprovalEventOptions): Promise<import("@ijstech/eth-wallet").IERC20ApprovalAction>;
         setData(value: ISubscription): Promise<void>;
         getData(): ISubscription;
     }
-    export interface IModel extends EventEmitter {
+    export interface IModel {
         isRenewal: boolean;
         renewalDate: number;
-        showHeader: boolean;
         setData(value: ISubscription): void;
         getData(): ISubscription;
-        isRpcWalletConnected(): boolean;
-        isClientWalletConnected(): boolean;
-        updateDappContainerData(): void;
-        wallets: IWalletPlugin[];
-        networks: INetworkConfig[];
-        setApprovalModelAction(options: IERC20ApprovalEventOptions): Promise<any>;
-        chainId: number;
         token: ITokenObject;
         referrer: string;
-        getContractAddress(type: ContractType): string;
         productMarketplaceAddress: string;
-        approvalModel: ERC20ApprovalModel;
-        initWallet(): void;
-        switchNetwork(chainId: number): Promise<void>;
         productId: number;
         currency: string;
         fetchProductInfo(productId: number): Promise<IProductInfo>;
-        getSubscriptionAction(recipient: string): Promise<any>;
+        getSubscriptionAction(recipient: string): Promise<(options: ISubscriptionActionOptions) => Promise<void>>;
         getProductId(nftAddress: string, nftId?: number): Promise<number>;
         recipients: string[];
         productInfo: IProductInfo;
         paymentMethod: PaymentMethod;
         discountRuleId: number;
         discountApplied: ISubscriptionDiscountRule;
-        durationUnits: {
-            label: string;
-            value: string;
-        }[];
-        getNetworkInfo(chainId: number): IExtendedNetwork;
-        formatNumber(value: number | string | BigNumber, decimalFigures?: number): string;
-        getDurationInDays(duration: number, unit: 'days' | 'months' | 'years', startDate: any): number;
         getDiscountAndTotalAmount(days: number): {
             discountType: 'Percentage' | 'FixedAmount';
             discountValue: number;
             discountAmount: BigNumber;
             totalAmount: BigNumber;
         };
-        viewExplorerByAddress(chainId: number, address: string): void;
         getPaymentTransactionData(startTime: number, endTime: number, days: number): any;
         updateDiscount(duration: number, startDate: any, days: number): void;
         getBasePriceLabel(): string;
     }
 }
-/// <amd-module name="@scom/scom-subscription/tonWallet.ts" />
-declare module "@scom/scom-subscription/tonWallet.ts" {
-    export class TonWallet {
-        private toncore;
-        private tonConnectUI;
-        private _isWalletConnected;
-        private _onTonWalletStatusChanged;
-        constructor(moduleDir: string, onTonWalletStatusChanged: (isConnected: boolean) => void);
-        get isWalletConnected(): boolean;
-        loadLib(moduleDir: string): Promise<unknown>;
-        initWallet(): void;
-        connectWallet(): Promise<void>;
-        sendTransaction(txData: any): Promise<any>;
-    }
-}
 /// <amd-module name="@scom/scom-subscription" />
 declare module "@scom/scom-subscription" {
     import { ControlElement, Module } from '@ijstech/components';
+    import { IERC20ApprovalAction, IERC20ApprovalEventOptions } from '@ijstech/eth-wallet';
     import { ISubscription } from "@scom/scom-subscription/interface.ts";
     interface ScomSubscriptionElement extends ControlElement {
         onSubscribed?: () => void;
@@ -406,12 +380,19 @@ declare module "@scom/scom-subscription" {
         private btnSubmit;
         private txStatusModal;
         private model;
-        private mdWallet;
+        private pnlEVMWallet;
+        private mdEVMWallet;
+        private approvalModel;
         private approvalModelAction;
         private isApproving;
         private tokenAmountIn;
+        private evmWallet;
         private tonWallet;
         onSubscribed?: () => void;
+        get durationUnits(): {
+            label: string;
+            value: string;
+        }[];
         private get duration();
         private get durationUnit();
         get isRenewal(): boolean;
@@ -427,9 +408,9 @@ declare module "@scom/scom-subscription" {
         private updateTheme;
         private updateStyle;
         private updateTag;
-        private onChainChanged;
-        private onWalletConnected;
+        private onEVMWalletConnected;
         private refreshDappContainer;
+        setApprovalModelAction(options: IERC20ApprovalEventOptions): Promise<IERC20ApprovalAction>;
         private initApprovalAction;
         private updateContractAddress;
         private updateEVMUI;
@@ -453,7 +434,6 @@ declare module "@scom/scom-subscription" {
         private onCopyNFTContract;
         private onCopyToken;
         private showTxStatusModal;
-        private connectWallet;
         private onApprove;
         private updateSubmitButton;
         private doSubmitAction;
