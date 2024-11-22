@@ -1,7 +1,7 @@
 {
     "name": "@scom/scom-subscription",
     "type": "widget",
-    "version": "0.1.6",
+    "version": "0.1.7",
     "dependencies": [
         "@ijstech/components",
         "@ijstech/eth-wallet",
