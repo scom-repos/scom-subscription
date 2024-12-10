@@ -1494,6 +1494,8 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                 const confirmationCallback = async () => {
                     this.model.productInfo = await this.model.fetchProductInfo(this.model.productId);
                     this.updateSpotsRemaining();
+                    if (this.txStatusModal)
+                        this.txStatusModal.closeModal();
                     if (this.onSubscribed)
                         this.onSubscribed();
                 };
