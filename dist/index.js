@@ -1402,7 +1402,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             }
         }
         handleStartDateChanged() {
-            this.lblStartDate.caption = this.edtStartDate.value.format('DD/MM/YYYY hh:mm A');
+            this.lblStartDate.caption = this.edtStartDate.value?.format('DD/MM/YYYY hh:mm A') || "";
             this._updateEndDate();
             this._updateDiscount();
         }
