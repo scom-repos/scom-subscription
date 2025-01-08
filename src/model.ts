@@ -1,4 +1,4 @@
-import { application, FormatUtils, moment, RequireJS } from "@ijstech/components";
+import { application, FormatUtils, Module, moment, RequireJS } from "@ijstech/components";
 import getNetworkList from "@scom/scom-network-list";
 import { IProductInfo, ISubscription } from "./interface";
 import { ISubscriptionDiscountRule, Nip19, PaymentMethod, SocialDataManager } from "@scom/scom-social-sdk";
@@ -14,12 +14,13 @@ export interface ISubscriptionActionOptions {
     endTime?: number;
     days?: number;
     duration?: number;
-    recipient?: string; 
+    recipient?: string;
     callback?: any;
     confirmationCallback?: any;
 }
 
 export class TonModel {
+    private _module: Module;
     private _data: ISubscription = {};
     private _productInfo: IProductInfo;
     private _discountApplied: ISubscriptionDiscountRule;
@@ -34,7 +35,7 @@ export class TonModel {
     get paymentMethod() {
         if (this._data.paymentMethod) {
             return this._data.paymentMethod;
-        } 
+        }
         else {
             return this._data.currency === 'TON' ? PaymentMethod.TON : PaymentMethod.Telegram;
         }
@@ -116,7 +117,8 @@ export class TonModel {
         this._dataManager = manager;
     }
 
-    constructor(tonWallet: TonWallet) {
+    constructor(module: Module, tonWallet: TonWallet) {
+        this._module = module;
         this.tonWallet = tonWallet;
     }
 
@@ -225,8 +227,10 @@ export class TonModel {
 
     getBasePriceLabel() {
         const { durationInDays, currency, tokenAmount } = this.getData();
-        const duration = durationInDays > 1 ? ` for ${durationInDays} days` : ' per day';
-        return `${tokenAmount ? formatNumber(tokenAmount, 6) : ""} ${currency}${duration}`;
+        const formattedAmount = tokenAmount ? formatNumber(tokenAmount, 6) : "";
+        return durationInDays > 1 ?
+            this._module.i18n.get('$base_price_ton_duration_in_days', { amount: formattedAmount, currency: currency, days: `${durationInDays}` }) :
+            this._module.i18n.get('$base_price_ton_per_day', { amount: formattedAmount, currency: currency });
     }
 
     async setData(value: ISubscription) {
@@ -239,6 +243,7 @@ export class TonModel {
 }
 
 export class EVMModel {
+    private _module: Module;
     private _data: ISubscription = {};
     private _productInfo: IProductInfo;
     private _discountApplied: ISubscriptionDiscountRule;
@@ -330,7 +335,8 @@ export class EVMModel {
         this._dataManager = manager;
     }
 
-    constructor(evmWallet: EVMWallet) {
+    constructor(module: Module, evmWallet: EVMWallet) {
+        this._module = module;
         this._evmWallet = evmWallet;
     }
 
@@ -651,8 +657,11 @@ export class EVMModel {
         const { token, price, priceDuration } = this.productInfo;
         const productPrice = Utils.fromDecimals(price, token.decimals).toFixed();
         const days = Math.ceil((priceDuration?.toNumber() || 0) / 86400);
-        const duration = days > 1 ? ` for ${days} days` : ' per day';
-        return `${productPrice ? formatNumber(productPrice, 6) : ""} ${token?.symbol || ""}${duration}`;
+        const formattedAmount = productPrice ? formatNumber(productPrice, 6) : "";
+        const symbol = token?.symbol || "";
+        return days > 1 ?
+            this._module.i18n.get('$base_price_evm_duration_in_days', { amount: formattedAmount, symbol: symbol, days: `${days}` }) :
+            this._module.i18n.get('$base_price_evm_per_day', { amount: formattedAmount, symbol: symbol });
     }
 
     async setData(value: ISubscription) {

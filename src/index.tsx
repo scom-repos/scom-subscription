@@ -7,7 +7,6 @@ import {
     customElements,
     Datepicker,
     FormatUtils,
-    HStack,
     IComboItem,
     Icon,
     Input,
@@ -20,7 +19,7 @@ import {
 } from '@ijstech/components';
 import { BigNumber, ERC20ApprovalModel, IERC20ApprovalAction, IERC20ApprovalEventOptions, Utils } from '@ijstech/eth-wallet';
 import ScomDappContainer from '@scom/scom-dapp-container';
-import { ISubscriptionDiscountRule, PaymentMethod } from '@scom/scom-social-sdk';
+import { PaymentMethod } from '@scom/scom-social-sdk';
 import { ITokenObject } from '@scom/scom-token-list';
 import ScomTxStatusModal from '@scom/scom-tx-status-modal';
 import { inputStyle, linkStyle } from './index.css';
@@ -30,6 +29,7 @@ import ScomWalletModal from '@scom/scom-wallet-modal';
 import { EVMWallet } from './evmWallet';
 import { TonWallet } from './tonWallet';
 import { formatNumber, getDurationInDays } from './commonUtils';
+import translations from './translations.json';
 
 const Theme = Styles.Theme.ThemeVars;
 const path = application.currentModuleDir;
@@ -93,15 +93,15 @@ export default class ScomSubscription extends Module {
     get durationUnits() {
         return [
             {
-                label: 'Day(s)',
+                label: this.i18n.get('$day(s)'),
                 value: 'days'
             },
             {
-                label: 'Month(s)',
+                label: this.i18n.get('$month(s)'),
                 value: 'months'
             },
             {
-                label: 'Year(s)',
+                label: this.i18n.get('$year(s)'),
                 value: 'years'
             }
         ];
@@ -160,13 +160,13 @@ export default class ScomSubscription extends Module {
                 chainId: data.chainId,
                 defaultChainId: data.defaultChainId
             })
-            this.model = new EVMModel(this.evmWallet);
+            this.model = new EVMModel(this, this.evmWallet);
         }
         else {
             if (!this.tonWallet) {
                 this.tonWallet = new TonWallet(moduleDir, this.handleTonWalletStatusChanged.bind(this));
             }
-            this.model = new TonModel(this.tonWallet);
+            this.model = new TonModel(this, this.tonWallet);
         }
         this.handleDurationChanged = this.handleDurationChanged.bind(this);
         this.comboDurationUnit.items = this.durationUnits;
@@ -268,7 +268,7 @@ export default class ScomSubscription extends Module {
                     this.btnSubmit.enabled = false;
                     if (!this.isApproving) {
                         this.btnApprove.rightIcon.visible = false;
-                        this.btnApprove.caption = 'Approve';
+                        this.btnApprove.caption = this.i18n.get('$approve');
                     }
                     this.btnApprove.enabled = true;
                     this.isApproving = false;
@@ -285,7 +285,7 @@ export default class ScomSubscription extends Module {
                     this.isApproving = true;
                     this.btnApprove.rightIcon.spin = true;
                     this.btnApprove.rightIcon.visible = true;
-                    this.btnApprove.caption = `Approving ${token?.symbol || ''}`;
+                    this.btnApprove.caption = this.i18n.get('$approving_token', { token: token?.symbol || ''});
                     this.btnSubmit.visible = false;
                     if (receipt) {
                         this.showTxStatusModal('success', receipt);
@@ -293,14 +293,14 @@ export default class ScomSubscription extends Module {
                 },
                 onApproved: async (token: ITokenObject) => {
                     this.btnApprove.rightIcon.visible = false;
-                    this.btnApprove.caption = 'Approve';
+                    this.btnApprove.caption = this.i18n.get('$approve');
                     this.isApproving = false;
                     this.btnSubmit.visible = true;
                     this.btnSubmit.enabled = true;
                 },
                 onApprovingError: async (token: ITokenObject, err: Error) => {
                     this.showTxStatusModal('error', err);
-                    this.btnApprove.caption = 'Approve';
+                    this.btnApprove.caption = this.i18n.get('$approve');
                     this.btnApprove.rightIcon.visible = false;
                     this.isApproving = false;
                 },
@@ -387,7 +387,7 @@ export default class ScomSubscription extends Module {
         if (this.model.productId >= 0) {
             const remaining = formatNumber(this.model.productInfo.quantity, 0);
             this.lblRemaining.caption = remaining;
-            this.lblSpotsRemaining.caption = this.model.productInfo.quantity.gt(0) ? `&#128293; Hurry! Only [ ${remaining} NFTs Left ] &#128293;` : 'SOLD OUT';
+            this.lblSpotsRemaining.caption = this.model.productInfo.quantity.gt(0) ? this.i18n.get('$hurry_only_remaining_nfts_left', { remaining: remaining }) : this.i18n.get('$sold_out');
             this.lblSpotsRemaining.font = { bold: true, size: '1rem', color: this.model.productInfo.quantity.gt(0) ? Theme.text.primary : Theme.colors.error.dark };
             this.pnlSpotsRemaining.visible = this.model.productInfo.quantity.lte(50);
         } else {
@@ -456,22 +456,22 @@ export default class ScomSubscription extends Module {
         const paymentMethod = this.model.paymentMethod;
         if (paymentMethod === PaymentMethod.EVM) {
             if (!this.evmWallet.isWalletConnected()) {
-              this.btnSubmit.caption = 'Connect Wallet';
+              this.btnSubmit.caption = this.i18n.get('$connect_wallet');
               this.btnSubmit.enabled = true;
             }
             else if (!this.evmWallet.isNetworkConnected()) {
-              this.btnSubmit.caption = 'Switch Network';
+              this.btnSubmit.caption = this.i18n.get('$switch_network');
               this.btnSubmit.enabled = true;
             }
             else {
-                this.btnSubmit.caption = this.isRenewal ? 'Renew Subscription' : 'Subscribe';
+                this.btnSubmit.caption = this.i18n.get(this.isRenewal ? '$renew_subscription' : '$subscribe');
             }
         } else {
             if (!this.tonWallet.isWalletConnected) {
-                this.btnSubmit.caption = 'Connect Wallet';
+                this.btnSubmit.caption = this.i18n.get('$connect_wallet');
             }
             else {
-                this.btnSubmit.caption = this.isRenewal ? 'Renew Subscription' : 'Subscribe';
+                this.btnSubmit.caption = this.i18n.get(this.isRenewal ? '$renew_subscription' : '$subscribe');
             }
         }
     }
@@ -498,7 +498,7 @@ export default class ScomSubscription extends Module {
         const { discountType, discountValue, discountAmount, totalAmount } = this.model.getDiscountAndTotalAmount(days);
         this.pnlDiscount.visible = discountType != null;
         if (this.pnlDiscount.visible) {
-            this.lblDiscount.caption = discountType === 'Percentage' ? `Discount (${discountValue}%)` : 'Discount';
+            this.lblDiscount.caption = discountType === 'Percentage' ? this.i18n.get('$discount_percentage', { percentage: `${discountValue}` }) : this.i18n.get('$discount');
             this.lblDiscountAmount.caption = `-${formatNumber(discountAmount, 6)} ${currency || ''}`;
         }
         this.tokenAmountIn = totalAmount.toFixed();
@@ -520,7 +520,7 @@ export default class ScomSubscription extends Module {
             this.edtStartDate.minDate = now;
         } else {
             this.edtStartDate.value = now;
-            this.lblStartDate.caption = "Now";
+            this.lblStartDate.caption = this.i18n.get('$now');
             this._updateEndDate();
         }
     }
@@ -546,7 +546,7 @@ export default class ScomSubscription extends Module {
     private onToggleDetail() {
         const isExpanding = this.detailWrapper.visible;
         this.detailWrapper.visible = !isExpanding;
-        this.btnDetail.caption = `${isExpanding ? 'More' : 'Hide'} Information`;
+        this.btnDetail.caption = this.i18n.get(isExpanding ? '$more_information' : '$hide_information');
         this.btnDetail.rightIcon.name = isExpanding ? 'caret-down' : 'caret-up';
     }
 
@@ -610,7 +610,7 @@ export default class ScomSubscription extends Module {
     }
 
     private async onApprove() {
-        this.showTxStatusModal('warning', `Approving`);
+        this.showTxStatusModal('warning', this.i18n.get('$approving'));
         await this.approvalModelAction.doApproveAction(this.model.token, this.tokenAmountIn);
     }
 
@@ -627,11 +627,11 @@ export default class ScomSubscription extends Module {
         const recipient = (this.comboRecipient.selectedItem as IComboItem)?.value;
         try {
             if (!this.edtStartDate.value) {
-                throw new Error('Start Date Required');
+                throw new Error(this.i18n.get('$start_date_required'));
             }
             const _duration = Number(this.edtDuration.value) || 0;
             if (!_duration || _duration <= 0 || !Number.isInteger(_duration)) {
-                throw new Error(!this.edtDuration.value ? 'Duration Required' : 'Invalid Duration');
+                throw new Error(this.i18n.get(!this.edtDuration.value ? '$duration_required' : '$invalid_duration'));
             }
             this.updateSubmitButton(true);
             const startTime = this.edtStartDate.value.unix();
@@ -676,7 +676,7 @@ export default class ScomSubscription extends Module {
                 await this.evmWallet.switchNetwork(rpcWallet.chainId);
                 return;
             }
-            this.showTxStatusModal('warning', 'Confirming');
+            this.showTxStatusModal('warning', this.i18n.get('$confirming'));
             this.approvalModelAction.doPayAction();
         } else if (paymentMethod === PaymentMethod.TON) {
             if (!this.tonWallet.isWalletConnected) {
@@ -689,6 +689,7 @@ export default class ScomSubscription extends Module {
     }
 
     init() {
+		this.i18n.init({ ...translations });
         super.init();
     }
 
@@ -721,7 +722,7 @@ export default class ScomSubscription extends Module {
                             <i-stack direction="vertical" width="100%" maxWidth={600} gap='0.5rem'>
                                 <i-stack id="pnlBody" direction="vertical" gap="0.5rem">
                                     <i-stack id='pnlRecipient' width='100%' direction="horizontal" alignItems="center" justifyContent="space-between" gap={10} visible={false}>
-                                        <i-label caption='Wallet Address to Receive NFT' font={{ bold: true, size: '1rem' }}></i-label>
+                                        <i-label caption="$wallet_address_to_receive_nft" font={{ bold: true, size: '1rem' }}></i-label>
                                         <i-combo-box
                                             id="comboRecipient"
                                             height={36}
@@ -732,11 +733,11 @@ export default class ScomSubscription extends Module {
                                         ></i-combo-box>
                                     </i-stack>
                                     <i-stack direction="horizontal" width="100%" alignItems="center" justifyContent="space-between" gap={10}>
-                                        <i-label caption="Start Date" font={{ bold: true, size: '1rem' }}></i-label>
+                                        <i-label caption="$start_date" font={{ bold: true, size: '1rem' }}></i-label>
                                         <i-label id="lblStartDate" font={{ size: '1rem' }} />
                                     </i-stack>
                                     <i-stack id="pnlCustomStartDate" direction="horizontal" width="100%" alignItems="center" justifyContent="space-between" gap={10} visible={false}>
-                                        <i-checkbox id="chkCustomStartDate" height="auto" caption="Custom" onChanged={this.handleCustomCheckboxChange}></i-checkbox>
+                                        <i-checkbox id="chkCustomStartDate" height="auto" caption="$custom" onChanged={this.handleCustomCheckboxChange}></i-checkbox>
                                         <i-panel stack={{ basis: '50%' }}>
                                             <i-datepicker
                                                 id="edtStartDate"
@@ -753,7 +754,7 @@ export default class ScomSubscription extends Module {
                                         </i-panel>
                                     </i-stack>
                                     <i-stack direction="horizontal" width="100%" alignItems="center" justifyContent="space-between" gap={10}>
-                                        <i-label caption="Duration" font={{ bold: true, size: '1rem' }}></i-label>
+                                        <i-label caption="$duration" font={{ bold: true, size: '1rem' }}></i-label>
                                         <i-stack direction="horizontal" alignItems="center" stack={{ basis: '50%' }} gap="0.5rem">
                                             <i-panel width="50%">
                                                 <i-input
@@ -782,11 +783,11 @@ export default class ScomSubscription extends Module {
                                         </i-stack>
                                     </i-stack>
                                     <i-stack direction="horizontal" width="100%" alignItems="center" justifyContent="space-between" gap={10}>
-                                        <i-label caption="End Date" font={{ bold: true, size: '1rem' }}></i-label>
+                                        <i-label caption="$end_date" font={{ bold: true, size: '1rem' }}></i-label>
                                         <i-label id="lblEndDate" font={{ size: '1rem' }} />
                                     </i-stack>
                                     <i-stack direction="horizontal" width="100%" alignItems="center" justifyContent="space-between" gap={10}>
-                                        <i-label caption='Base Price' font={{ bold: true, size: '1rem' }}></i-label>
+                                        <i-label caption="$base_price" font={{ bold: true, size: '1rem' }}></i-label>
                                         <i-label id='lblBasePrice' font={{ size: '1rem' }}></i-label>
                                     </i-stack>
                                     <i-stack
@@ -799,7 +800,7 @@ export default class ScomSubscription extends Module {
                                         lineHeight={1.5}
                                         visible={false}
                                     >
-                                        <i-label id="lblDiscount" caption="Discount" font={{ bold: true, size: '1rem' }}></i-label>
+                                        <i-label id="lblDiscount" caption="$discount" font={{ bold: true, size: '1rem' }}></i-label>
                                         <i-label id="lblDiscountAmount" font={{ size: '1rem' }}></i-label>
                                     </i-stack>
                                     <i-stack
@@ -811,7 +812,7 @@ export default class ScomSubscription extends Module {
                                         lineHeight={1.5}
                                     >
                                         <i-stack direction="horizontal" alignItems='center' gap="0.5rem">
-                                            <i-label caption='You will pay' font={{ bold: true, size: '1rem' }}></i-label>
+                                            <i-label caption="$you_will_pay" font={{ bold: true, size: '1rem' }}></i-label>
                                         </i-stack>
                                         <i-label id='lblOrderTotal' font={{ size: '1rem' }} caption="0"></i-label>
                                     </i-stack>
@@ -821,7 +822,7 @@ export default class ScomSubscription extends Module {
                                         </i-stack>
                                         <i-button
                                             id="btnDetail"
-                                            caption="More Information"
+                                            caption="$more_information"
                                             rightIcon={{ width: 10, height: 16, margin: { left: 5 }, fill: Theme.text.primary, name: 'caret-down' }}
                                             background={{ color: 'transparent' }}
                                             border={{ width: 1, style: 'solid', color: Theme.text.primary, radius: 8 }}
@@ -834,25 +835,25 @@ export default class ScomSubscription extends Module {
                                         />
                                         <i-stack id="detailWrapper" direction="vertical" gap={10} visible={false}>
                                             <i-stack width="100%" direction="horizontal" justifyContent="space-between" gap="0.5rem" lineHeight={1.5}>
-                                                <i-label caption="Remaining" font={{ bold: true, size: '1rem' }} />
+                                                <i-label caption="$remaining" font={{ bold: true, size: '1rem' }} />
                                                 <i-label id='lblRemaining' font={{ size: '1rem' }}></i-label>
                                             </i-stack>
                                             <i-hstack width="100%" justifyContent="space-between" gap="0.5rem" lineHeight={1.5}>
-                                                <i-label caption="Marketplace Contract Address" font={{ bold: true, size: '1rem' }} />
+                                                <i-label caption="$marketplace_contract_address" font={{ bold: true, size: '1rem' }} />
                                                 <i-hstack gap="0.25rem" verticalAlignment="center" maxWidth="calc(100% - 75px)">
                                                     <i-label id="lblMarketplaceContract" font={{ size: '1rem', color: Theme.colors.primary.main }} textDecoration="underline" class={linkStyle} onClick={this.onViewMarketplaceContract} />
                                                     <i-icon fill={Theme.text.primary} name="copy" width={16} height={16} onClick={this.onCopyMarketplaceContract} cursor="pointer" />
                                                 </i-hstack>
                                             </i-hstack>
                                             <i-hstack width="100%" justifyContent="space-between" gap="0.5rem" lineHeight={1.5}>
-                                                <i-label caption="NFT Contract Address" font={{ bold: true, size: '1rem' }} />
+                                                <i-label caption="$nft_contract_address" font={{ bold: true, size: '1rem' }} />
                                                 <i-hstack gap="0.25rem" verticalAlignment="center" maxWidth="calc(100% - 75px)">
                                                     <i-label id="lblNFTContract" font={{ size: '1rem', color: Theme.colors.primary.main }} textDecoration="underline" class={linkStyle} onClick={this.onViewNFTContract} />
                                                     <i-icon fill={Theme.text.primary} name="copy" width={16} height={16} onClick={this.onCopyNFTContract} cursor="pointer" />
                                                 </i-hstack>
                                             </i-hstack>
                                             <i-hstack width="100%" justifyContent="space-between" gap="0.5rem" lineHeight={1.5}>
-                                                <i-label caption="Token used for payment" font={{ bold: true, size: '1rem' }} />
+                                                <i-label caption="$token_used_for_payment" font={{ bold: true, size: '1rem' }} />
                                                 <i-hstack gap="0.25rem" verticalAlignment="center" maxWidth="calc(100% - 75px)">
                                                     <i-label id="lblToken" font={{ size: '1rem', color: Theme.colors.primary.main }} textDecoration="underline" class={linkStyle} onClick={this.onViewToken} />
                                                     <i-icon id="iconCopyToken" visible={false} fill={Theme.text.primary} name="copy" width={16} height={16} onClick={this.onCopyToken} cursor="pointer" />
@@ -864,7 +865,7 @@ export default class ScomSubscription extends Module {
                                         <i-button
                                             id="btnApprove"
                                             width='100%'
-                                            caption="Approve"
+                                            caption="$approve"
                                             padding={{ top: '1rem', bottom: '1rem', left: '1rem', right: '1rem' }}
                                             font={{ size: '1rem', color: Theme.colors.primary.contrastText, bold: true }}
                                             rightIcon={{ visible: false, fill: Theme.colors.primary.contrastText }}
@@ -876,7 +877,7 @@ export default class ScomSubscription extends Module {
                                         <i-button
                                             id='btnSubmit'
                                             width='100%'
-                                            caption='Subscribe'
+                                            caption='$subscribe'
                                             padding={{ top: '1rem', bottom: '1rem', left: '1rem', right: '1rem' }}
                                             font={{ size: '1rem', color: Theme.colors.primary.contrastText, bold: true }}
                                             rightIcon={{ visible: false, fill: Theme.colors.primary.contrastText }}

@@ -2,6 +2,7 @@ import { application, Container, customModule, Module } from '@ijstech/component
 import { getMulticallInfoList } from '@scom/scom-multicall';
 import ScomSubscription from '@scom/scom-subscription';
 import { INetwork } from '@ijstech/eth-wallet';
+import { PaymentMethod, PaymentModel, TokenType } from '@scom/scom-social-sdk';
 
 @customModule
 export default class Module1 extends Module {
@@ -19,22 +20,22 @@ export default class Module1 extends Module {
   };
   private evmData = {
     "name": "Pay By BNB",
-    "paymentModel": "Subscription",
+    "paymentModel": PaymentModel.Subscription,
     "chainId": 97,
     "tokenAddress": "0xA0Afb051902675707Adc709aCFac2AD15562D9f9",
-    "tokenType": "ERC721",
-    "tokenAmount": 0.01,
+    "tokenType": TokenType.ERC721,
+    "tokenAmount": "0.01",
     "currency": "0x0000000000000000000000000000000000000000",
     "durationInDays": 1,
     "discountRules": [],
-    "commissionRate": "5",
+    "commissionRate": 5,
     "affiliates": [
       "0xb15E094957c31D6b0d08714015fF85Bec7842635"
     ],
     "recipients": [
       "0x9C142a1B9743A8540B59BE676aB9F29B19dC9192"
     ],
-    "paymentMethod": "EVM",
+    "paymentMethod": PaymentMethod.EVM,
     "wallets": [
       { name: 'metamask' }
     ]
@@ -52,8 +53,7 @@ export default class Module1 extends Module {
 
   async init() {
     super.init();
-    const builder = this.subscription.getConfigurators().find((conf: any) => conf.target === 'Builders');
-    builder.setData(this.evmData);
+    this.subscription.setData(this.evmData);
   }
 
   render() {
