@@ -425,7 +425,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
         set dataManager(manager) {
             this._dataManager = manager;
         }
-        constructor(tonWallet) {
+        constructor(module, tonWallet) {
             this._data = {};
             this.updateDiscount = (duration, startDate, days) => {
                 this.discountApplied = undefined;
@@ -457,6 +457,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                     }
                 }
             };
+            this._module = module;
             this.tonWallet = tonWallet;
         }
         getDiscountAndTotalAmount(days) {
@@ -531,8 +532,10 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
         }
         getBasePriceLabel() {
             const { durationInDays, currency, tokenAmount } = this.getData();
-            const duration = durationInDays > 1 ? ` for ${durationInDays} days` : ' per day';
-            return `${tokenAmount ? (0, commonUtils_1.formatNumber)(tokenAmount, 6) : ""} ${currency}${duration}`;
+            const formattedAmount = tokenAmount ? (0, commonUtils_1.formatNumber)(tokenAmount, 6) : "";
+            return durationInDays > 1 ?
+                this._module.i18n.get('$base_price_ton_duration_in_days', { amount: formattedAmount, currency: currency, days: `${durationInDays}` }) :
+                this._module.i18n.get('$base_price_ton_per_day', { amount: formattedAmount, currency: currency });
         }
         async setData(value) {
             this._data = value;
@@ -606,7 +609,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
         set dataManager(manager) {
             this._dataManager = manager;
         }
-        constructor(evmWallet) {
+        constructor(module, evmWallet) {
             this._data = {};
             this.updateDiscount = (duration, startDate, days) => {
                 this.discountApplied = undefined;
@@ -638,6 +641,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                     }
                 }
             };
+            this._module = module;
             this._evmWallet = evmWallet;
         }
         registerSendTxEvents(sendTxEventHandlers) {
@@ -936,8 +940,11 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             const { token, price, priceDuration } = this.productInfo;
             const productPrice = eth_wallet_2.Utils.fromDecimals(price, token.decimals).toFixed();
             const days = Math.ceil((priceDuration?.toNumber() || 0) / 86400);
-            const duration = days > 1 ? ` for ${days} days` : ' per day';
-            return `${productPrice ? (0, commonUtils_1.formatNumber)(productPrice, 6) : ""} ${token?.symbol || ""}${duration}`;
+            const formattedAmount = productPrice ? (0, commonUtils_1.formatNumber)(productPrice, 6) : "";
+            const symbol = token?.symbol || "";
+            return days > 1 ?
+                this._module.i18n.get('$base_price_evm_duration_in_days', { amount: formattedAmount, symbol: symbol, days: `${days}` }) :
+                this._module.i18n.get('$base_price_evm_per_day', { amount: formattedAmount, symbol: symbol });
         }
         async setData(value) {
             this._data = value;
@@ -948,7 +955,128 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
     }
     exports.EVMModel = EVMModel;
 });
-define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", "@ijstech/eth-wallet", "@scom/scom-social-sdk", "@scom/scom-subscription/index.css.ts", "@scom/scom-subscription/model.ts", "@scom/scom-subscription/evmWallet.ts", "@scom/scom-subscription/tonWallet.ts", "@scom/scom-subscription/commonUtils.ts"], function (require, exports, components_6, eth_wallet_3, scom_social_sdk_2, index_css_1, model_1, evmWallet_1, tonWallet_1, commonUtils_2) {
+define("@scom/scom-subscription/translations.json.ts", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    ///<amd-module name='@scom/scom-subscription/translations.json.ts'/> 
+    exports.default = {
+        "en": {
+            "day(s)": "Day(s)",
+            "month(s)": "Month(s)",
+            "year(s)": "Year(s)",
+            "approve": "Approve",
+            "approving": "Approving",
+            "approving_token": "Approving {{token}}",
+            "sold_out": "SOLD OUT",
+            "hurry_only_remaining_nfts_left": "🔥Hurry! Only [ {{remaining}} NFTs Left ]🔥",
+            "connect_wallet": "Connect Wallet",
+            "switch_network": "Switch Network",
+            "subscribe": "Subscribe",
+            "renew_subscription": "Renew Subscription",
+            "discount": "Discount",
+            "discount_percentage": "Discount ({{percentage}}%)",
+            "now": "Now",
+            "hide_information": "Hide Information",
+            "more_information": "More Information",
+            "start_date_required": "Start Date Required",
+            "duration_required": "Duration Required",
+            "invalid_duration": "Invalid Duration",
+            "confirming": "Confirming",
+            "wallet_address_to_receive_nft": "Wallet Address to Receive NFT",
+            "start_date": "Start Date",
+            "custom": "Custom",
+            "duration": "Duration",
+            "end_date": "End Date",
+            "base_price": "Base Price",
+            "you_will_pay": "You will pay",
+            "remaining": "Remaining",
+            "marketplace_contract_address": "Marketplace Contract Address",
+            "nft_contract_address": "NFT Contract Address",
+            "token_used_for_payment": "Token used for payment",
+            "base_price_ton_duration_in_days": "{{amount}} {{currency}} for {{days}} days",
+            "base_price_ton_per_day": "{{amount}} {{currency}} per day",
+            "base_price_evm_duration_in_days": "{{amount}} {{symbol}} for {{days}} days",
+            "base_price_evm_per_day": "{{amount}} {{symbol}} per day",
+        },
+        "zh-hant": {
+            "day(s)": "天",
+            "month(s)": "月",
+            "year(s)": "年",
+            "approve": "批准",
+            "approving": "正在批准",
+            "approving_token": "正在批准 {{token}}",
+            "sold_out": "售罄",
+            "hurry_only_remaining_nfts_left": "🔥快點！只剩 [ {{remaining}} 個 NFTs ]🔥",
+            "connect_wallet": "連接錢包",
+            "switch_network": "切換網絡",
+            "subscribe": "訂閱",
+            "renew_subscription": "續訂",
+            "discount": "折扣",
+            "discount_percentage": "折扣 ({{percentage}}%)",
+            "now": "現在",
+            "hide_information": "隱藏資訊",
+            "more_information": "更多資訊",
+            "start_date_required": "必須選擇開始日期",
+            "duration_required": "必須選擇持續時間",
+            "invalid_duration": "無效的持續時間",
+            "confirming": "確認中",
+            "wallet_address_to_receive_nft": "接收 NFT 的錢包地址",
+            "start_date": "開始日期",
+            "custom": "自訂",
+            "duration": "持續時間",
+            "end_date": "結束日期",
+            "base_price": "基本價格",
+            "you_will_pay": "您將支付",
+            "remaining": "剩餘",
+            "marketplace_contract_address": "市場合約地址",
+            "nft_contract_address": "NFT 合約地址",
+            "token_used_for_payment": "用於支付的代幣",
+            "base_price_ton_duration_in_days": "{{amount}} {{currency}} 為期 {{days}} 天",
+            "base_price_ton_per_day": "{{amount}} {{currency}} 每天",
+            "base_price_evm_duration_in_days": "{{amount}} {{symbol}} 為期 {{days}} 天",
+            "base_price_evm_per_day": "{{amount}} {{symbol}} 每天"
+        },
+        "vi": {
+            "day(s)": "Ngày",
+            "month(s)": "Tháng",
+            "year(s)": "Năm",
+            "approve": "Phê duyệt",
+            "approving": "Đang phê duyệt",
+            "approving_token": "Đang phê duyệt {{token}}",
+            "sold_out": "HẾT HÀNG",
+            "hurry_only_remaining_nfts_left": "🔥Nhanh lên! Chỉ còn [ {{remaining}} NFTs ]🔥",
+            "connect_wallet": "Kết nối ví",
+            "switch_network": "Chuyển mạng",
+            "subscribe": "Đăng ký",
+            "renew_subscription": "Gia hạn đăng ký",
+            "discount": "Giảm giá",
+            "discount_percentage": "Giảm giá ({{percentage}}%)",
+            "now": "Bây giờ",
+            "hide_information": "Ẩn thông tin",
+            "more_information": "Thông tin thêm",
+            "start_date_required": "Cần có ngày bắt đầu",
+            "duration_required": "Cần có thời gian",
+            "invalid_duration": "Thời gian không hợp lệ",
+            "confirming": "Đang xác nhận",
+            "wallet_address_to_receive_nft": "Địa chỉ ví để nhận NFT",
+            "start_date": "Ngày bắt đầu",
+            "custom": "Tùy chỉnh",
+            "duration": "Thời gian",
+            "end_date": "Ngày kết thúc",
+            "base_price": "Giá cơ bản",
+            "you_will_pay": "Bạn sẽ thanh toán",
+            "remaining": "Còn lại",
+            "marketplace_contract_address": "Địa chỉ hợp đồng thị trường",
+            "nft_contract_address": "Địa chỉ hợp đồng NFT",
+            "token_used_for_payment": "Token sử dụng để thanh toán",
+            "base_price_ton_duration_in_days": "{{amount}} {{currency}} cho {{days}} ngày",
+            "base_price_ton_per_day": "{{amount}} {{currency}} mỗi ngày",
+            "base_price_evm_duration_in_days": "{{amount}} {{symbol}} cho {{days}} ngày",
+            "base_price_evm_per_day": "{{amount}} {{symbol}} mỗi ngày"
+        }
+    };
+});
+define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", "@ijstech/eth-wallet", "@scom/scom-social-sdk", "@scom/scom-subscription/index.css.ts", "@scom/scom-subscription/model.ts", "@scom/scom-subscription/evmWallet.ts", "@scom/scom-subscription/tonWallet.ts", "@scom/scom-subscription/commonUtils.ts", "@scom/scom-subscription/translations.json.ts"], function (require, exports, components_6, eth_wallet_3, scom_social_sdk_2, index_css_1, model_1, evmWallet_1, tonWallet_1, commonUtils_2, translations_json_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     const Theme = components_6.Styles.Theme.ThemeVars;
@@ -987,15 +1115,15 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
         get durationUnits() {
             return [
                 {
-                    label: 'Day(s)',
+                    label: this.i18n.get('$day(s)'),
                     value: 'days'
                 },
                 {
-                    label: 'Month(s)',
+                    label: this.i18n.get('$month(s)'),
                     value: 'months'
                 },
                 {
-                    label: 'Year(s)',
+                    label: this.i18n.get('$year(s)'),
                     value: 'years'
                 }
             ];
@@ -1047,13 +1175,13 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                     chainId: data.chainId,
                     defaultChainId: data.defaultChainId
                 });
-                this.model = new model_1.EVMModel(this.evmWallet);
+                this.model = new model_1.EVMModel(this, this.evmWallet);
             }
             else {
                 if (!this.tonWallet) {
                     this.tonWallet = new tonWallet_1.TonWallet(moduleDir, this.handleTonWalletStatusChanged.bind(this));
                 }
-                this.model = new model_1.TonModel(this.tonWallet);
+                this.model = new model_1.TonModel(this, this.tonWallet);
             }
             this.handleDurationChanged = this.handleDurationChanged.bind(this);
             this.comboDurationUnit.items = this.durationUnits;
@@ -1140,7 +1268,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                         this.btnSubmit.enabled = false;
                         if (!this.isApproving) {
                             this.btnApprove.rightIcon.visible = false;
-                            this.btnApprove.caption = 'Approve';
+                            this.btnApprove.caption = this.i18n.get('$approve');
                         }
                         this.btnApprove.enabled = true;
                         this.isApproving = false;
@@ -1157,7 +1285,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                         this.isApproving = true;
                         this.btnApprove.rightIcon.spin = true;
                         this.btnApprove.rightIcon.visible = true;
-                        this.btnApprove.caption = `Approving ${token?.symbol || ''}`;
+                        this.btnApprove.caption = this.i18n.get('$approving_token', { token: token?.symbol || '' });
                         this.btnSubmit.visible = false;
                         if (receipt) {
                             this.showTxStatusModal('success', receipt);
@@ -1165,14 +1293,14 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                     },
                     onApproved: async (token) => {
                         this.btnApprove.rightIcon.visible = false;
-                        this.btnApprove.caption = 'Approve';
+                        this.btnApprove.caption = this.i18n.get('$approve');
                         this.isApproving = false;
                         this.btnSubmit.visible = true;
                         this.btnSubmit.enabled = true;
                     },
                     onApprovingError: async (token, err) => {
                         this.showTxStatusModal('error', err);
-                        this.btnApprove.caption = 'Approve';
+                        this.btnApprove.caption = this.i18n.get('$approve');
                         this.btnApprove.rightIcon.visible = false;
                         this.isApproving = false;
                     },
@@ -1261,7 +1389,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             if (this.model.productId >= 0) {
                 const remaining = (0, commonUtils_2.formatNumber)(this.model.productInfo.quantity, 0);
                 this.lblRemaining.caption = remaining;
-                this.lblSpotsRemaining.caption = this.model.productInfo.quantity.gt(0) ? `&#128293; Hurry! Only [ ${remaining} NFTs Left ] &#128293;` : 'SOLD OUT';
+                this.lblSpotsRemaining.caption = this.model.productInfo.quantity.gt(0) ? this.i18n.get('$hurry_only_remaining_nfts_left', { remaining: remaining }) : this.i18n.get('$sold_out');
                 this.lblSpotsRemaining.font = { bold: true, size: '1rem', color: this.model.productInfo.quantity.gt(0) ? Theme.text.primary : Theme.colors.error.dark };
                 this.pnlSpotsRemaining.visible = this.model.productInfo.quantity.lte(50);
             }
@@ -1334,23 +1462,23 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             const paymentMethod = this.model.paymentMethod;
             if (paymentMethod === scom_social_sdk_2.PaymentMethod.EVM) {
                 if (!this.evmWallet.isWalletConnected()) {
-                    this.btnSubmit.caption = 'Connect Wallet';
+                    this.btnSubmit.caption = this.i18n.get('$connect_wallet');
                     this.btnSubmit.enabled = true;
                 }
                 else if (!this.evmWallet.isNetworkConnected()) {
-                    this.btnSubmit.caption = 'Switch Network';
+                    this.btnSubmit.caption = this.i18n.get('$switch_network');
                     this.btnSubmit.enabled = true;
                 }
                 else {
-                    this.btnSubmit.caption = this.isRenewal ? 'Renew Subscription' : 'Subscribe';
+                    this.btnSubmit.caption = this.i18n.get(this.isRenewal ? '$renew_subscription' : '$subscribe');
                 }
             }
             else {
                 if (!this.tonWallet.isWalletConnected) {
-                    this.btnSubmit.caption = 'Connect Wallet';
+                    this.btnSubmit.caption = this.i18n.get('$connect_wallet');
                 }
                 else {
-                    this.btnSubmit.caption = this.isRenewal ? 'Renew Subscription' : 'Subscribe';
+                    this.btnSubmit.caption = this.i18n.get(this.isRenewal ? '$renew_subscription' : '$subscribe');
                 }
             }
         }
@@ -1375,7 +1503,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             const { discountType, discountValue, discountAmount, totalAmount } = this.model.getDiscountAndTotalAmount(days);
             this.pnlDiscount.visible = discountType != null;
             if (this.pnlDiscount.visible) {
-                this.lblDiscount.caption = discountType === 'Percentage' ? `Discount (${discountValue}%)` : 'Discount';
+                this.lblDiscount.caption = discountType === 'Percentage' ? this.i18n.get('$discount_percentage', { percentage: `${discountValue}` }) : this.i18n.get('$discount');
                 this.lblDiscountAmount.caption = `-${(0, commonUtils_2.formatNumber)(discountAmount, 6)} ${currency || ''}`;
             }
             this.tokenAmountIn = totalAmount.toFixed();
@@ -1397,7 +1525,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             }
             else {
                 this.edtStartDate.value = now;
-                this.lblStartDate.caption = "Now";
+                this.lblStartDate.caption = this.i18n.get('$now');
                 this._updateEndDate();
             }
         }
@@ -1419,7 +1547,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
         onToggleDetail() {
             const isExpanding = this.detailWrapper.visible;
             this.detailWrapper.visible = !isExpanding;
-            this.btnDetail.caption = `${isExpanding ? 'More' : 'Hide'} Information`;
+            this.btnDetail.caption = this.i18n.get(isExpanding ? '$more_information' : '$hide_information');
             this.btnDetail.rightIcon.name = isExpanding ? 'caret-down' : 'caret-up';
         }
         onViewMarketplaceContract() {
@@ -1461,7 +1589,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             this.updateCopyIcon(target);
         }
         async onApprove() {
-            this.showTxStatusModal('warning', `Approving`);
+            this.showTxStatusModal('warning', this.i18n.get('$approving'));
             await this.approvalModelAction.doApproveAction(this.model.token, this.tokenAmountIn);
         }
         updateSubmitButton(submitting) {
@@ -1476,11 +1604,11 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             const recipient = this.comboRecipient.selectedItem?.value;
             try {
                 if (!this.edtStartDate.value) {
-                    throw new Error('Start Date Required');
+                    throw new Error(this.i18n.get('$start_date_required'));
                 }
                 const _duration = Number(this.edtDuration.value) || 0;
                 if (!_duration || _duration <= 0 || !Number.isInteger(_duration)) {
-                    throw new Error(!this.edtDuration.value ? 'Duration Required' : 'Invalid Duration');
+                    throw new Error(this.i18n.get(!this.edtDuration.value ? '$duration_required' : '$invalid_duration'));
                 }
                 this.updateSubmitButton(true);
                 const startTime = this.edtStartDate.value.unix();
@@ -1527,7 +1655,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                     await this.evmWallet.switchNetwork(rpcWallet.chainId);
                     return;
                 }
-                this.showTxStatusModal('warning', 'Confirming');
+                this.showTxStatusModal('warning', this.i18n.get('$confirming'));
                 this.approvalModelAction.doPayAction();
             }
             else if (paymentMethod === scom_social_sdk_2.PaymentMethod.TON) {
@@ -1541,6 +1669,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             }
         }
         init() {
+            this.i18n.init({ ...translations_json_1.default });
             super.init();
         }
         render() {
@@ -1554,61 +1683,61 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                             this.$render("i-stack", { direction: "vertical", width: "100%", maxWidth: 600, gap: '0.5rem' },
                                 this.$render("i-stack", { id: "pnlBody", direction: "vertical", gap: "0.5rem" },
                                     this.$render("i-stack", { id: 'pnlRecipient', width: '100%', direction: "horizontal", alignItems: "center", justifyContent: "space-between", gap: 10, visible: false },
-                                        this.$render("i-label", { caption: 'Wallet Address to Receive NFT', font: { bold: true, size: '1rem' } }),
+                                        this.$render("i-label", { caption: "$wallet_address_to_receive_nft", font: { bold: true, size: '1rem' } }),
                                         this.$render("i-combo-box", { id: "comboRecipient", height: 36, width: "100%", icon: { width: 14, height: 14, name: 'angle-down', fill: Theme.divider }, border: { width: 1, style: 'solid', color: Theme.divider, radius: 5 }, stack: { basis: '50%' } })),
                                     this.$render("i-stack", { direction: "horizontal", width: "100%", alignItems: "center", justifyContent: "space-between", gap: 10 },
-                                        this.$render("i-label", { caption: "Start Date", font: { bold: true, size: '1rem' } }),
+                                        this.$render("i-label", { caption: "$start_date", font: { bold: true, size: '1rem' } }),
                                         this.$render("i-label", { id: "lblStartDate", font: { size: '1rem' } })),
                                     this.$render("i-stack", { id: "pnlCustomStartDate", direction: "horizontal", width: "100%", alignItems: "center", justifyContent: "space-between", gap: 10, visible: false },
-                                        this.$render("i-checkbox", { id: "chkCustomStartDate", height: "auto", caption: "Custom", onChanged: this.handleCustomCheckboxChange }),
+                                        this.$render("i-checkbox", { id: "chkCustomStartDate", height: "auto", caption: "$custom", onChanged: this.handleCustomCheckboxChange }),
                                         this.$render("i-panel", { stack: { basis: '50%' } },
                                             this.$render("i-datepicker", { id: "edtStartDate", height: 36, width: "100%", type: "dateTime", dateTimeFormat: "DD/MM/YYYY hh:mm A", placeholder: "dd/mm/yyyy hh:mm A", background: { color: Theme.input.background }, font: { size: '1rem' }, border: { radius: "0.375rem" }, onChanged: this.handleStartDateChanged }))),
                                     this.$render("i-stack", { direction: "horizontal", width: "100%", alignItems: "center", justifyContent: "space-between", gap: 10 },
-                                        this.$render("i-label", { caption: "Duration", font: { bold: true, size: '1rem' } }),
+                                        this.$render("i-label", { caption: "$duration", font: { bold: true, size: '1rem' } }),
                                         this.$render("i-stack", { direction: "horizontal", alignItems: "center", stack: { basis: '50%' }, gap: "0.5rem" },
                                             this.$render("i-panel", { width: "50%" },
                                                 this.$render("i-input", { id: "edtDuration", height: 36, width: "100%", class: index_css_1.inputStyle, inputType: 'number', font: { size: '1rem' }, border: { radius: 4, style: 'none' }, padding: { top: '0.25rem', bottom: '0.25rem', left: '0.5rem', right: '0.5rem' }, onChanged: this.handleDurationChanged })),
                                             this.$render("i-panel", { width: "50%" },
                                                 this.$render("i-combo-box", { id: "comboDurationUnit", height: 36, width: "100%", icon: { width: 14, height: 14, name: 'angle-down', fill: Theme.divider }, border: { width: 1, style: 'solid', color: Theme.divider, radius: 5 }, onChanged: this.handleDurationUnitChanged })))),
                                     this.$render("i-stack", { direction: "horizontal", width: "100%", alignItems: "center", justifyContent: "space-between", gap: 10 },
-                                        this.$render("i-label", { caption: "End Date", font: { bold: true, size: '1rem' } }),
+                                        this.$render("i-label", { caption: "$end_date", font: { bold: true, size: '1rem' } }),
                                         this.$render("i-label", { id: "lblEndDate", font: { size: '1rem' } })),
                                     this.$render("i-stack", { direction: "horizontal", width: "100%", alignItems: "center", justifyContent: "space-between", gap: 10 },
-                                        this.$render("i-label", { caption: 'Base Price', font: { bold: true, size: '1rem' } }),
+                                        this.$render("i-label", { caption: "$base_price", font: { bold: true, size: '1rem' } }),
                                         this.$render("i-label", { id: 'lblBasePrice', font: { size: '1rem' } })),
                                     this.$render("i-stack", { id: "pnlDiscount", direction: "horizontal", width: "100%", justifyContent: "space-between", alignItems: "center", gap: "0.5rem", lineHeight: 1.5, visible: false },
-                                        this.$render("i-label", { id: "lblDiscount", caption: "Discount", font: { bold: true, size: '1rem' } }),
+                                        this.$render("i-label", { id: "lblDiscount", caption: "$discount", font: { bold: true, size: '1rem' } }),
                                         this.$render("i-label", { id: "lblDiscountAmount", font: { size: '1rem' } })),
                                     this.$render("i-stack", { width: "100%", direction: "horizontal", justifyContent: "space-between", alignItems: 'center', gap: "0.5rem", lineHeight: 1.5 },
                                         this.$render("i-stack", { direction: "horizontal", alignItems: 'center', gap: "0.5rem" },
-                                            this.$render("i-label", { caption: 'You will pay', font: { bold: true, size: '1rem' } })),
+                                            this.$render("i-label", { caption: "$you_will_pay", font: { bold: true, size: '1rem' } })),
                                         this.$render("i-label", { id: 'lblOrderTotal', font: { size: '1rem' }, caption: "0" })),
                                     this.$render("i-stack", { id: "pnlDetail", direction: "vertical", gap: "0.5rem" },
                                         this.$render("i-stack", { id: "pnlSpotsRemaining", direction: "vertical", width: "100%", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", lineHeight: 1.5 },
                                             this.$render("i-label", { id: "lblSpotsRemaining", font: { bold: true, size: '1rem' } })),
-                                        this.$render("i-button", { id: "btnDetail", caption: "More Information", rightIcon: { width: 10, height: 16, margin: { left: 5 }, fill: Theme.text.primary, name: 'caret-down' }, background: { color: 'transparent' }, border: { width: 1, style: 'solid', color: Theme.text.primary, radius: 8 }, width: 280, maxWidth: "100%", height: 36, margin: { top: 4, bottom: 16, left: 'auto', right: 'auto' }, onClick: this.onToggleDetail, visible: false }),
+                                        this.$render("i-button", { id: "btnDetail", caption: "$more_information", rightIcon: { width: 10, height: 16, margin: { left: 5 }, fill: Theme.text.primary, name: 'caret-down' }, background: { color: 'transparent' }, border: { width: 1, style: 'solid', color: Theme.text.primary, radius: 8 }, width: 280, maxWidth: "100%", height: 36, margin: { top: 4, bottom: 16, left: 'auto', right: 'auto' }, onClick: this.onToggleDetail, visible: false }),
                                         this.$render("i-stack", { id: "detailWrapper", direction: "vertical", gap: 10, visible: false },
                                             this.$render("i-stack", { width: "100%", direction: "horizontal", justifyContent: "space-between", gap: "0.5rem", lineHeight: 1.5 },
-                                                this.$render("i-label", { caption: "Remaining", font: { bold: true, size: '1rem' } }),
+                                                this.$render("i-label", { caption: "$remaining", font: { bold: true, size: '1rem' } }),
                                                 this.$render("i-label", { id: 'lblRemaining', font: { size: '1rem' } })),
                                             this.$render("i-hstack", { width: "100%", justifyContent: "space-between", gap: "0.5rem", lineHeight: 1.5 },
-                                                this.$render("i-label", { caption: "Marketplace Contract Address", font: { bold: true, size: '1rem' } }),
+                                                this.$render("i-label", { caption: "$marketplace_contract_address", font: { bold: true, size: '1rem' } }),
                                                 this.$render("i-hstack", { gap: "0.25rem", verticalAlignment: "center", maxWidth: "calc(100% - 75px)" },
                                                     this.$render("i-label", { id: "lblMarketplaceContract", font: { size: '1rem', color: Theme.colors.primary.main }, textDecoration: "underline", class: index_css_1.linkStyle, onClick: this.onViewMarketplaceContract }),
                                                     this.$render("i-icon", { fill: Theme.text.primary, name: "copy", width: 16, height: 16, onClick: this.onCopyMarketplaceContract, cursor: "pointer" }))),
                                             this.$render("i-hstack", { width: "100%", justifyContent: "space-between", gap: "0.5rem", lineHeight: 1.5 },
-                                                this.$render("i-label", { caption: "NFT Contract Address", font: { bold: true, size: '1rem' } }),
+                                                this.$render("i-label", { caption: "$nft_contract_address", font: { bold: true, size: '1rem' } }),
                                                 this.$render("i-hstack", { gap: "0.25rem", verticalAlignment: "center", maxWidth: "calc(100% - 75px)" },
                                                     this.$render("i-label", { id: "lblNFTContract", font: { size: '1rem', color: Theme.colors.primary.main }, textDecoration: "underline", class: index_css_1.linkStyle, onClick: this.onViewNFTContract }),
                                                     this.$render("i-icon", { fill: Theme.text.primary, name: "copy", width: 16, height: 16, onClick: this.onCopyNFTContract, cursor: "pointer" }))),
                                             this.$render("i-hstack", { width: "100%", justifyContent: "space-between", gap: "0.5rem", lineHeight: 1.5 },
-                                                this.$render("i-label", { caption: "Token used for payment", font: { bold: true, size: '1rem' } }),
+                                                this.$render("i-label", { caption: "$token_used_for_payment", font: { bold: true, size: '1rem' } }),
                                                 this.$render("i-hstack", { gap: "0.25rem", verticalAlignment: "center", maxWidth: "calc(100% - 75px)" },
                                                     this.$render("i-label", { id: "lblToken", font: { size: '1rem', color: Theme.colors.primary.main }, textDecoration: "underline", class: index_css_1.linkStyle, onClick: this.onViewToken }),
                                                     this.$render("i-icon", { id: "iconCopyToken", visible: false, fill: Theme.text.primary, name: "copy", width: 16, height: 16, onClick: this.onCopyToken, cursor: "pointer" }))))),
                                     this.$render("i-stack", { direction: "vertical", width: "100%", justifyContent: "center", alignItems: "center", margin: { top: '0.5rem' }, gap: 8 },
-                                        this.$render("i-button", { id: "btnApprove", width: '100%', caption: "Approve", padding: { top: '1rem', bottom: '1rem', left: '1rem', right: '1rem' }, font: { size: '1rem', color: Theme.colors.primary.contrastText, bold: true }, rightIcon: { visible: false, fill: Theme.colors.primary.contrastText }, background: { color: Theme.background.gradient }, border: { radius: 12 }, visible: false, onClick: this.onApprove }),
-                                        this.$render("i-button", { id: 'btnSubmit', width: '100%', caption: 'Subscribe', padding: { top: '1rem', bottom: '1rem', left: '1rem', right: '1rem' }, font: { size: '1rem', color: Theme.colors.primary.contrastText, bold: true }, rightIcon: { visible: false, fill: Theme.colors.primary.contrastText }, background: { color: Theme.background.gradient }, border: { radius: 12 }, enabled: false, onClick: this.onSubmit }))))),
+                                        this.$render("i-button", { id: "btnApprove", width: '100%', caption: "$approve", padding: { top: '1rem', bottom: '1rem', left: '1rem', right: '1rem' }, font: { size: '1rem', color: Theme.colors.primary.contrastText, bold: true }, rightIcon: { visible: false, fill: Theme.colors.primary.contrastText }, background: { color: Theme.background.gradient }, border: { radius: 12 }, visible: false, onClick: this.onApprove }),
+                                        this.$render("i-button", { id: 'btnSubmit', width: '100%', caption: '$subscribe', padding: { top: '1rem', bottom: '1rem', left: '1rem', right: '1rem' }, font: { size: '1rem', color: Theme.colors.primary.contrastText, bold: true }, rightIcon: { visible: false, fill: Theme.colors.primary.contrastText }, background: { color: Theme.background.gradient }, border: { radius: 12 }, enabled: false, onClick: this.onSubmit }))))),
                         this.$render("i-panel", { id: "pnlEVMWallet" }),
                         this.$render("i-scom-tx-status-modal", { id: "txStatusModal" })))));
         }

@@ -170,6 +170,7 @@ declare module "@scom/scom-subscription/tonWallet.ts" {
 }
 /// <amd-module name="@scom/scom-subscription/model.ts" />
 declare module "@scom/scom-subscription/model.ts" {
+    import { Module } from "@ijstech/components";
     import { IProductInfo, ISubscription } from "@scom/scom-subscription/interface.ts";
     import { ISubscriptionDiscountRule, PaymentMethod, SocialDataManager } from "@scom/scom-social-sdk";
     import { BigNumber, ISendTxEventsOptions } from "@ijstech/eth-wallet";
@@ -186,6 +187,7 @@ declare module "@scom/scom-subscription/model.ts" {
         confirmationCallback?: any;
     }
     export class TonModel {
+        private _module;
         private _data;
         private _productInfo;
         private _discountApplied;
@@ -213,7 +215,7 @@ declare module "@scom/scom-subscription/model.ts" {
         set productInfo(info: IProductInfo);
         get dataManager(): SocialDataManager;
         set dataManager(manager: SocialDataManager);
-        constructor(tonWallet: TonWallet);
+        constructor(module: Module, tonWallet: TonWallet);
         updateDiscount: (duration: number, startDate: any, days: number) => void;
         getDiscountAndTotalAmount(days: number): {
             discountType: "Percentage" | "FixedAmount";
@@ -239,6 +241,7 @@ declare module "@scom/scom-subscription/model.ts" {
         getData(): ISubscription;
     }
     export class EVMModel {
+        private _module;
         private _data;
         private _productInfo;
         private _discountApplied;
@@ -266,7 +269,7 @@ declare module "@scom/scom-subscription/model.ts" {
         set productInfo(info: IProductInfo);
         get dataManager(): SocialDataManager;
         set dataManager(manager: SocialDataManager);
-        constructor(evmWallet: EVMWallet);
+        constructor(module: Module, evmWallet: EVMWallet);
         registerSendTxEvents(sendTxEventHandlers: ISendTxEventsOptions): void;
         updateDiscount: (duration: number, startDate: any, days: number) => void;
         getDiscountAndTotalAmount(days: number): {
@@ -331,6 +334,126 @@ declare module "@scom/scom-subscription/model.ts" {
         updateDiscount(duration: number, startDate: any, days: number): void;
         getBasePriceLabel(): string;
     }
+}
+/// <amd-module name="@scom/scom-subscription/translations.json.ts" />
+declare module "@scom/scom-subscription/translations.json.ts" {
+    const _default_1: {
+        en: {
+            "day(s)": string;
+            "month(s)": string;
+            "year(s)": string;
+            approve: string;
+            approving: string;
+            approving_token: string;
+            sold_out: string;
+            hurry_only_remaining_nfts_left: string;
+            connect_wallet: string;
+            switch_network: string;
+            subscribe: string;
+            renew_subscription: string;
+            discount: string;
+            discount_percentage: string;
+            now: string;
+            hide_information: string;
+            more_information: string;
+            start_date_required: string;
+            duration_required: string;
+            invalid_duration: string;
+            confirming: string;
+            wallet_address_to_receive_nft: string;
+            start_date: string;
+            custom: string;
+            duration: string;
+            end_date: string;
+            base_price: string;
+            you_will_pay: string;
+            remaining: string;
+            marketplace_contract_address: string;
+            nft_contract_address: string;
+            token_used_for_payment: string;
+            base_price_ton_duration_in_days: string;
+            base_price_ton_per_day: string;
+            base_price_evm_duration_in_days: string;
+            base_price_evm_per_day: string;
+        };
+        "zh-hant": {
+            "day(s)": string;
+            "month(s)": string;
+            "year(s)": string;
+            approve: string;
+            approving: string;
+            approving_token: string;
+            sold_out: string;
+            hurry_only_remaining_nfts_left: string;
+            connect_wallet: string;
+            switch_network: string;
+            subscribe: string;
+            renew_subscription: string;
+            discount: string;
+            discount_percentage: string;
+            now: string;
+            hide_information: string;
+            more_information: string;
+            start_date_required: string;
+            duration_required: string;
+            invalid_duration: string;
+            confirming: string;
+            wallet_address_to_receive_nft: string;
+            start_date: string;
+            custom: string;
+            duration: string;
+            end_date: string;
+            base_price: string;
+            you_will_pay: string;
+            remaining: string;
+            marketplace_contract_address: string;
+            nft_contract_address: string;
+            token_used_for_payment: string;
+            base_price_ton_duration_in_days: string;
+            base_price_ton_per_day: string;
+            base_price_evm_duration_in_days: string;
+            base_price_evm_per_day: string;
+        };
+        vi: {
+            "day(s)": string;
+            "month(s)": string;
+            "year(s)": string;
+            approve: string;
+            approving: string;
+            approving_token: string;
+            sold_out: string;
+            hurry_only_remaining_nfts_left: string;
+            connect_wallet: string;
+            switch_network: string;
+            subscribe: string;
+            renew_subscription: string;
+            discount: string;
+            discount_percentage: string;
+            now: string;
+            hide_information: string;
+            more_information: string;
+            start_date_required: string;
+            duration_required: string;
+            invalid_duration: string;
+            confirming: string;
+            wallet_address_to_receive_nft: string;
+            start_date: string;
+            custom: string;
+            duration: string;
+            end_date: string;
+            base_price: string;
+            you_will_pay: string;
+            remaining: string;
+            marketplace_contract_address: string;
+            nft_contract_address: string;
+            token_used_for_payment: string;
+            base_price_ton_duration_in_days: string;
+            base_price_ton_per_day: string;
+            base_price_evm_duration_in_days: string;
+            base_price_evm_per_day: string;
+        };
+    };
+    export default _default_1;
 }
 /// <amd-module name="@scom/scom-subscription" />
 declare module "@scom/scom-subscription" {

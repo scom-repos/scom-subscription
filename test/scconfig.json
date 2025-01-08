@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@scom/scom-subscription": "*",
+    "@scom/scom-social-sdk": "*",
     "@scom/scom-dapp-container": "*",
     "@ijstech/eth-contract": "*",
     "@ijstech/eth-wallet": "*",
