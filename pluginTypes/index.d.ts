@@ -46,6 +46,7 @@ declare module "@scom/scom-subscription/interface.ts" {
         paymentModel?: PaymentModel;
         paymentMethod?: PaymentMethod;
         chainId?: number;
+        networkCode?: string;
         tokenAddress?: string;
         tokenType?: TokenType;
         tokenId?: number;
@@ -194,6 +195,7 @@ declare module "@scom/scom-subscription/model.ts" {
         private _dataManager;
         private tonWallet;
         private _productMarketplaceAddress;
+        private _token;
         get productMarketplaceAddress(): string;
         get paymentMethod(): PaymentMethod;
         get currency(): string;

@@ -27,6 +27,7 @@ export class TonModel {
     private _dataManager: SocialDataManager;
     private tonWallet: TonWallet;
     private _productMarketplaceAddress: string;
+    private _token: ITokenObject;
 
     get productMarketplaceAddress() {
         return this._productMarketplaceAddress;
@@ -42,11 +43,11 @@ export class TonModel {
     }
 
     get currency() {
-        return this._data.currency;
+        return this._token?.symbol || this._data.currency;
     }
 
     get token() {
-        return this.productInfo?.token;
+        return this._token;
     }
 
     get recipient() {
@@ -226,15 +227,18 @@ export class TonModel {
     }
 
     getBasePriceLabel() {
-        const { durationInDays, currency, tokenAmount } = this.getData();
+        const { durationInDays, tokenAmount } = this.getData();
         const formattedAmount = tokenAmount ? formatNumber(tokenAmount, 6) : "";
         return durationInDays > 1 ?
-            this._module.i18n.get('$base_price_ton_duration_in_days', { amount: formattedAmount, currency: currency, days: `${durationInDays}` }) :
-            this._module.i18n.get('$base_price_ton_per_day', { amount: formattedAmount, currency: currency });
+            this._module.i18n.get('$base_price_ton_duration_in_days', { amount: formattedAmount, currency: this.currency, days: `${durationInDays}` }) :
+            this._module.i18n.get('$base_price_ton_per_day', { amount: formattedAmount, currency: this.currency });
     }
 
     async setData(value: ISubscription) {
         this._data = value;
+        const { currency, networkCode } = value;
+        this._token = networkCode ?
+            tokenStore.getTokenListByNetworkCode(networkCode).find(token => token.symbol === currency || token.address === currency) : null;
     }
 
     getData() {

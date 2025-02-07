@@ -369,10 +369,10 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             }
         }
         get currency() {
-            return this._data.currency;
+            return this._token?.symbol || this._data.currency;
         }
         get token() {
-            return this.productInfo?.token;
+            return this._token;
         }
         get recipient() {
             return this._data.recipient ?? '';
@@ -531,14 +531,17 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             return transaction;
         }
         getBasePriceLabel() {
-            const { durationInDays, currency, tokenAmount } = this.getData();
+            const { durationInDays, tokenAmount } = this.getData();
             const formattedAmount = tokenAmount ? (0, commonUtils_1.formatNumber)(tokenAmount, 6) : "";
             return durationInDays > 1 ?
-                this._module.i18n.get('$base_price_ton_duration_in_days', { amount: formattedAmount, currency: currency, days: `${durationInDays}` }) :
-                this._module.i18n.get('$base_price_ton_per_day', { amount: formattedAmount, currency: currency });
+                this._module.i18n.get('$base_price_ton_duration_in_days', { amount: formattedAmount, currency: this.currency, days: `${durationInDays}` }) :
+                this._module.i18n.get('$base_price_ton_per_day', { amount: formattedAmount, currency: this.currency });
         }
         async setData(value) {
             this._data = value;
+            const { currency, networkCode } = value;
+            this._token = networkCode ?
+                scom_token_list_1.tokenStore.getTokenListByNetworkCode(networkCode).find(token => token.symbol === currency || token.address === currency) : null;
         }
         getData() {
             return this._data;
