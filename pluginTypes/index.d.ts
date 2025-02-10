@@ -148,25 +148,34 @@ declare module "@scom/scom-subscription/evmWallet.ts" {
         isWalletConnected(): boolean;
         isNetworkConnected(): boolean;
         getContractAddress(type: ContractType): any;
-        switchNetwork(chainId: number): Promise<void>;
+        switchNetwork(): Promise<void>;
         getNetworkInfo(chainId: number): IExtendedNetwork;
-        viewExplorerByAddress(chainId: number, address: string): void;
+        viewExplorerByAddress(address: string): void;
     }
 }
 /// <amd-module name="@scom/scom-subscription/tonWallet.ts" />
 declare module "@scom/scom-subscription/tonWallet.ts" {
+    import { ITokenObject } from "@scom/scom-token-list";
     export class TonWallet {
         private toncore;
         private tonConnectUI;
         private _isWalletConnected;
         private _onTonWalletStatusChanged;
+        private networkType;
         constructor(moduleDir: string, onTonWalletStatusChanged: (isConnected: boolean) => void);
         get isWalletConnected(): boolean;
         loadLib(moduleDir: string): Promise<unknown>;
         initWallet(): void;
+        getWalletAddress(): any;
+        private getTonCenterAPIEndpoint;
         connectWallet(): Promise<void>;
         sendTransaction(txData: any): Promise<any>;
         constructPayload(msg: string): any;
+        constructPayloadForTokenTransfer(to: string, amount: string, msg: string): string;
+        getTransactionMessageHash(boc: string): any;
+        buildOwnerSlice(userAddress: string): string;
+        getJettonWalletAddress(jettonMasterAddress: string, userAddress: string): Promise<string>;
+        transferToken(to: string, token: ITokenObject, amount: string, msg: string, callback?: (error: Error, receipt?: string) => Promise<void>, confirmationCallback?: (receipt: any) => Promise<void>): Promise<string>;
     }
 }
 /// <amd-module name="@scom/scom-subscription/model.ts" />
@@ -187,7 +196,7 @@ declare module "@scom/scom-subscription/model.ts" {
         callback?: any;
         confirmationCallback?: any;
     }
-    export class TonModel {
+    export class TonModel implements IModel {
         private _module;
         private _data;
         private _productInfo;
@@ -228,8 +237,9 @@ declare module "@scom/scom-subscription/model.ts" {
         getProductId(nftAddress: string, nftId?: number): Promise<number>;
         fetchProductInfo(productId: number): Promise<any>;
         getSubscriptionAction(recipient: string): Promise<any>;
-        subscribe(options: ISubscriptionActionOptions): Promise<any>;
-        renewSubscription(options: ISubscriptionActionOptions): Promise<any>;
+        private getPaymentTransactionComment;
+        subscribe(options: ISubscriptionActionOptions): Promise<string>;
+        renewSubscription(options: ISubscriptionActionOptions): Promise<string>;
         getPaymentTransactionData(startTime: number, endTime: number, days: number): {
             validUntil: number;
             messages: {
@@ -242,7 +252,7 @@ declare module "@scom/scom-subscription/model.ts" {
         setData(value: ISubscription): Promise<void>;
         getData(): ISubscription;
     }
-    export class EVMModel {
+    export class EVMModel implements IModel {
         private _module;
         private _data;
         private _productInfo;
@@ -506,7 +516,6 @@ declare module "@scom/scom-subscription" {
         private txStatusModal;
         private model;
         private pnlEVMWallet;
-        private mdEVMWallet;
         private approvalModel;
         private approvalModelAction;
         private isApproving;
