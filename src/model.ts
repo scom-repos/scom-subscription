@@ -19,7 +19,8 @@ export interface ISubscriptionActionOptions {
     confirmationCallback?: any;
 }
 
-export class TonModel {
+
+export class TonModel implements IModel {
     private _module: Module;
     private _data: ISubscription = {};
     private _productInfo: IProductInfo;
@@ -47,7 +48,13 @@ export class TonModel {
     }
 
     get token() {
-        return this._token;
+        const tokenList = tokenStore.getTokenListByNetworkCode('TON-TESTNET');
+        if (this._data.currency === 'TON') {
+            return tokenList.find(token => token.symbol === 'TON');
+        }
+        else {
+            return tokenList.find(token => token.address === this._data.currency);
+        }
     }
 
     get recipient() {
@@ -192,16 +199,39 @@ export class TonModel {
         }
     }
 
+    private getPaymentTransactionComment(startTime: number, endTime: number, days: number) {
+        const creatorPubkey = Nip19.decode(this._data.creatorId).data as string;
+        return `${creatorPubkey}:${this._data.communityId}:${this.dataManager.selfPubkey}:${startTime}:${endTime}`;
+    }
+
     async subscribe(options: ISubscriptionActionOptions) {
-        const { startTime, endTime, days } = options;
-        const txData = this.getPaymentTransactionData(startTime, endTime, days);
-        return await this.tonWallet.sendTransaction(txData);
+        const { startTime, endTime, days, callback, confirmationCallback } = options;
+        // const txData = this.getPaymentTransactionData(startTime, endTime, days);
+        // return await this.tonWallet.sendTransaction(txData);
+        const comment = this.getPaymentTransactionComment(startTime, endTime, days);
+        return await this.tonWallet.transferToken(
+            this.recipient, 
+            this.token, 
+            this._data.tokenAmount, 
+            comment, 
+            callback, 
+            confirmationCallback
+        );
     }
 
     async renewSubscription(options: ISubscriptionActionOptions) {
-        const { startTime, endTime, days } = options;
-        const txData = this.getPaymentTransactionData(startTime, endTime, days);
-        return await this.tonWallet.sendTransaction(txData);
+        const { startTime, endTime, days, callback, confirmationCallback } = options;
+        // const txData = this.getPaymentTransactionData(startTime, endTime, days);
+        // return await this.tonWallet.sendTransaction(txData);
+        const comment = this.getPaymentTransactionComment(startTime, endTime, days);
+        return await this.tonWallet.transferToken(
+            this.recipient, 
+            this.token, 
+            this._data.tokenAmount, 
+            comment, 
+            callback, 
+            confirmationCallback
+        );
     }
 
     getPaymentTransactionData(startTime: number, endTime: number, days: number) {
@@ -228,10 +258,11 @@ export class TonModel {
 
     getBasePriceLabel() {
         const { durationInDays, tokenAmount } = this.getData();
+        const symbol = this.token?.symbol || "";
         const formattedAmount = tokenAmount ? formatNumber(tokenAmount, 6) : "";
         return durationInDays > 1 ?
-            this._module.i18n.get('$base_price_ton_duration_in_days', { amount: formattedAmount, currency: this.currency, days: `${durationInDays}` }) :
-            this._module.i18n.get('$base_price_ton_per_day', { amount: formattedAmount, currency: this.currency });
+            this._module.i18n.get('$base_price_ton_duration_in_days', { amount: formattedAmount, currency: symbol, days: `${durationInDays}` }) :
+            this._module.i18n.get('$base_price_ton_per_day', { amount: formattedAmount, currency: symbol });
     }
 
     async setData(value: ISubscription) {
@@ -246,7 +277,7 @@ export class TonModel {
     }
 }
 
-export class EVMModel {
+export class EVMModel implements IModel {
     private _module: Module;
     private _data: ISubscription = {};
     private _productInfo: IProductInfo;
@@ -264,7 +295,7 @@ export class EVMModel {
     }
 
     get currency() {
-        return this.productInfo.token?.symbol;
+        return this.token?.symbol;
     }
 
     get token() {

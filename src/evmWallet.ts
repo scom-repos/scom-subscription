@@ -204,17 +204,19 @@ export class EVMWallet extends EventEmitter {
         return contracts[type]?.address;
     }
 
-    async switchNetwork(chainId: number) {
+    async switchNetwork() {
+        const rpcWallet = this.getRpcWallet();
         const wallet = Wallet.getClientInstance();
-        await wallet.switchNetwork(chainId);
+        await wallet.switchNetwork(rpcWallet.chainId);
     }
 
     getNetworkInfo(chainId: number) {
         return this.networkMap[chainId];
     }
 
-    viewExplorerByAddress(chainId: number, address: string) {
-        let network = this.getNetworkInfo(chainId);
+    viewExplorerByAddress(address: string) {
+        const rpcWallet = this.getRpcWallet();
+        let network = this.getNetworkInfo(rpcWallet.chainId);
         if (network && network.explorerAddressUrl) {
             let url = `${network.explorerAddressUrl}${address}`;
             window.open(url);

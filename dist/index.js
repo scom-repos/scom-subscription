@@ -259,15 +259,17 @@ define("@scom/scom-subscription/evmWallet.ts", ["require", "exports", "@scom/sco
             const contracts = this.contractInfoByChain[rpcWallet.chainId] || {};
             return contracts[type]?.address;
         }
-        async switchNetwork(chainId) {
+        async switchNetwork() {
+            const rpcWallet = this.getRpcWallet();
             const wallet = eth_wallet_1.Wallet.getClientInstance();
-            await wallet.switchNetwork(chainId);
+            await wallet.switchNetwork(rpcWallet.chainId);
         }
         getNetworkInfo(chainId) {
             return this.networkMap[chainId];
         }
-        viewExplorerByAddress(chainId, address) {
-            let network = this.getNetworkInfo(chainId);
+        viewExplorerByAddress(address) {
+            const rpcWallet = this.getRpcWallet();
+            let network = this.getNetworkInfo(rpcWallet.chainId);
             if (network && network.explorerAddressUrl) {
                 let url = `${network.explorerAddressUrl}${address}`;
                 window.open(url);
@@ -276,13 +278,15 @@ define("@scom/scom-subscription/evmWallet.ts", ["require", "exports", "@scom/sco
     }
     exports.EVMWallet = EVMWallet;
 });
-define("@scom/scom-subscription/tonWallet.ts", ["require", "exports", "@ijstech/components"], function (require, exports, components_4) {
+define("@scom/scom-subscription/tonWallet.ts", ["require", "exports", "@ijstech/components", "@ijstech/eth-wallet"], function (require, exports, components_4, eth_wallet_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.TonWallet = void 0;
+    const JETTON_TRANSFER_OP = 0xf8a7ea5; // 32-bit
     class TonWallet {
         constructor(moduleDir, onTonWalletStatusChanged) {
             this._isWalletConnected = false;
+            this.networkType = 'testnet';
             this.loadLib(moduleDir);
             this._onTonWalletStatusChanged = onTonWalletStatusChanged;
             this.initWallet();
@@ -330,6 +334,21 @@ define("@scom/scom-subscription/tonWallet.ts", ["require", "exports", "@ijstech/
                 console.log(err);
             }
         }
+        getWalletAddress() {
+            const rawAddress = this.tonConnectUI.account?.address;
+            const nonBounceableAddress = this.toncore.Address.parse(rawAddress).toString({ bounceable: false });
+            return nonBounceableAddress;
+        }
+        getTonCenterAPIEndpoint() {
+            switch (this.networkType) {
+                case 'mainnet':
+                    return 'https://toncenter.com/api';
+                case 'testnet':
+                    return 'https://testnet.toncenter.com/api';
+                default:
+                    throw new Error('Unsupported network type');
+            }
+        }
         async connectWallet() {
             try {
                 await this.tonConnectUI.openModal();
@@ -349,10 +368,116 @@ define("@scom/scom-subscription/tonWallet.ts", ["require", "exports", "@ijstech/
             const payload = body.toBoc().toString("base64");
             return payload;
         }
+        constructPayloadForTokenTransfer(to, amount, msg) {
+            const recipientAddress = this.toncore.Address.parse(to);
+            const forwardPayload = this.toncore.beginCell()
+                .storeUint(0, 32) // 0 opcode means we have a comment
+                .storeStringTail(msg)
+                .endCell();
+            const bodyCell = this.toncore.beginCell()
+                .storeUint(JETTON_TRANSFER_OP, 32) // function ID
+                .storeUint(0, 64) // query_id (can be 0 or a custom value)
+                .storeCoins(amount) // amount in nano-jettons
+                .storeAddress(recipientAddress) // destination
+                .storeAddress(null) // response_destination (set to NULL if you don't need callback)
+                .storeMaybeRef(null) // custom_payload (None)
+                .storeCoins(this.toncore.toNano('0.02')) // forward_ton_amount (some TON to forward, e.g. 0.02)
+                .storeMaybeRef(forwardPayload)
+                .endCell();
+            return bodyCell.toBoc().toString('base64');
+        }
+        getTransactionMessageHash(boc) {
+            const cell = this.toncore.Cell.fromBase64(boc);
+            const hashBytes = cell.hash();
+            const messageHash = hashBytes.toString('base64');
+            return messageHash;
+        }
+        buildOwnerSlice(userAddress) {
+            const owner = this.toncore.Address.parse(userAddress);
+            const cell = this.toncore.beginCell()
+                .storeAddress(owner)
+                .endCell();
+            return cell.toBoc().toString('base64');
+        }
+        async getJettonWalletAddress(jettonMasterAddress, userAddress) {
+            const base64Cell = this.buildOwnerSlice(userAddress);
+            const apiEndpoint = this.getTonCenterAPIEndpoint();
+            const url = `${apiEndpoint}/v3/runGetMethod`;
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    address: jettonMasterAddress,
+                    method: 'get_wallet_address',
+                    stack: [
+                        {
+                            type: 'slice',
+                            value: base64Cell,
+                        },
+                    ],
+                })
+            });
+            const data = await response.json();
+            const cell = this.toncore.Cell.fromBase64(data.stack[0].value);
+            const slice = cell.beginParse();
+            const address = slice.loadAddress();
+            return address.toString({
+                bounceable: true,
+                testOnly: this.networkType === 'testnet'
+            });
+        }
+        async transferToken(to, token, amount, msg, callback, confirmationCallback) {
+            let result;
+            let messageHash;
+            try {
+                if (!token.address) {
+                    const payload = this.constructPayload(msg);
+                    const transaction = {
+                        validUntil: Math.floor(Date.now() / 1000) + 60,
+                        messages: [
+                            {
+                                address: to,
+                                amount: eth_wallet_2.Utils.toDecimals(amount, 9).toFixed(),
+                                payload: payload
+                            }
+                        ]
+                    };
+                    result = await this.sendTransaction(transaction);
+                }
+                else {
+                    const senderJettonAddress = await this.getJettonWalletAddress(token.address, this.getWalletAddress());
+                    const jettonAmount = eth_wallet_2.Utils.toDecimals(amount, token.decimals).toFixed();
+                    const payload = this.constructPayloadForTokenTransfer(to, jettonAmount, msg);
+                    const transaction = {
+                        validUntil: Math.floor(Date.now() / 1000) + 60,
+                        messages: [
+                            {
+                                address: senderJettonAddress,
+                                amount: eth_wallet_2.Utils.toDecimals('0.05', 9),
+                                payload: payload
+                            }
+                        ]
+                    };
+                    result = await this.sendTransaction(transaction);
+                }
+                if (result) {
+                    messageHash = this.getTransactionMessageHash(result.boc);
+                    if (callback) {
+                        callback(null, messageHash);
+                    }
+                }
+            }
+            catch (error) {
+                callback(error);
+            }
+            return messageHash;
+        }
     }
     exports.TonWallet = TonWallet;
 });
-define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/components", "@scom/scom-network-list", "@scom/scom-social-sdk", "@ijstech/eth-wallet", "@scom/scom-product-contract", "@scom/scom-token-list", "@scom/scom-subscription/commonUtils.ts"], function (require, exports, components_5, scom_network_list_2, scom_social_sdk_1, eth_wallet_2, scom_product_contract_1, scom_token_list_1, commonUtils_1) {
+define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/components", "@scom/scom-network-list", "@scom/scom-social-sdk", "@ijstech/eth-wallet", "@scom/scom-product-contract", "@scom/scom-token-list", "@scom/scom-subscription/commonUtils.ts"], function (require, exports, components_5, scom_network_list_2, scom_social_sdk_1, eth_wallet_3, scom_product_contract_1, scom_token_list_1, commonUtils_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.EVMModel = exports.TonModel = void 0;
@@ -372,7 +497,13 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             return this._token?.symbol || this._data.currency;
         }
         get token() {
-            return this._token;
+            const tokenList = scom_token_list_1.tokenStore.getTokenListByNetworkCode('TON-TESTNET');
+            if (this._data.currency === 'TON') {
+                return tokenList.find(token => token.symbol === 'TON');
+            }
+            else {
+                return tokenList.find(token => token.address === this._data.currency);
+            }
         }
         get recipient() {
             return this._data.recipient ?? '';
@@ -432,7 +563,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                 if (!this._data.discountRules?.length || !duration || !startDate)
                     return;
                 const paymentMethod = this.paymentMethod;
-                const price = new eth_wallet_2.BigNumber(this._data.tokenAmount);
+                const price = new eth_wallet_3.BigNumber(this._data.tokenAmount);
                 const durationInDays = this._data.durationInDays;
                 const startTime = startDate.unix();
                 let discountAmount;
@@ -448,7 +579,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                         basePrice = price.times(1 - rule.discountPercentage / 100);
                     }
                     else if (rule.fixedPrice > 0) {
-                        basePrice = new eth_wallet_2.BigNumber(rule.fixedPrice);
+                        basePrice = new eth_wallet_3.BigNumber(rule.fixedPrice);
                     }
                     let tmpDiscountAmount = price.minus(basePrice).div(durationInDays).times(days);
                     if (!this.discountApplied || tmpDiscountAmount.gt(discountAmount)) {
@@ -465,7 +596,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             let discountValue;
             let discountAmount;
             let totalAmount;
-            const price = new eth_wallet_2.BigNumber(this._data?.tokenAmount || 0);
+            const price = new eth_wallet_3.BigNumber(this._data?.tokenAmount || 0);
             let basePrice = price;
             if (this.discountApplied) {
                 if (this.discountApplied.discountPercentage > 0) {
@@ -476,7 +607,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                 else if (this.discountApplied.fixedPrice > 0) {
                     discountValue = this.discountApplied.fixedPrice;
                     discountType = 'FixedAmount';
-                    basePrice = new eth_wallet_2.BigNumber(this.discountApplied.fixedPrice);
+                    basePrice = new eth_wallet_3.BigNumber(this.discountApplied.fixedPrice);
                 }
                 if (discountType) {
                     discountAmount = price.minus(basePrice).div(this._data.durationInDays).times(days);
@@ -500,15 +631,23 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                 return this.subscribe.bind(this);
             }
         }
+        getPaymentTransactionComment(startTime, endTime, days) {
+            const creatorPubkey = scom_social_sdk_1.Nip19.decode(this._data.creatorId).data;
+            return `${creatorPubkey}:${this._data.communityId}:${this.dataManager.selfPubkey}:${startTime}:${endTime}`;
+        }
         async subscribe(options) {
-            const { startTime, endTime, days } = options;
-            const txData = this.getPaymentTransactionData(startTime, endTime, days);
-            return await this.tonWallet.sendTransaction(txData);
+            const { startTime, endTime, days, callback, confirmationCallback } = options;
+            // const txData = this.getPaymentTransactionData(startTime, endTime, days);
+            // return await this.tonWallet.sendTransaction(txData);
+            const comment = this.getPaymentTransactionComment(startTime, endTime, days);
+            return await this.tonWallet.transferToken(this.recipient, this.token, this._data.tokenAmount, comment, callback, confirmationCallback);
         }
         async renewSubscription(options) {
-            const { startTime, endTime, days } = options;
-            const txData = this.getPaymentTransactionData(startTime, endTime, days);
-            return await this.tonWallet.sendTransaction(txData);
+            const { startTime, endTime, days, callback, confirmationCallback } = options;
+            // const txData = this.getPaymentTransactionData(startTime, endTime, days);
+            // return await this.tonWallet.sendTransaction(txData);
+            const comment = this.getPaymentTransactionComment(startTime, endTime, days);
+            return await this.tonWallet.transferToken(this.recipient, this.token, this._data.tokenAmount, comment, callback, confirmationCallback);
         }
         getPaymentTransactionData(startTime, endTime, days) {
             const { totalAmount } = this.getDiscountAndTotalAmount(days);
@@ -532,10 +671,11 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
         }
         getBasePriceLabel() {
             const { durationInDays, tokenAmount } = this.getData();
+            const symbol = this.token?.symbol || "";
             const formattedAmount = tokenAmount ? (0, commonUtils_1.formatNumber)(tokenAmount, 6) : "";
             return durationInDays > 1 ?
-                this._module.i18n.get('$base_price_ton_duration_in_days', { amount: formattedAmount, currency: this.currency, days: `${durationInDays}` }) :
-                this._module.i18n.get('$base_price_ton_per_day', { amount: formattedAmount, currency: this.currency });
+                this._module.i18n.get('$base_price_ton_duration_in_days', { amount: formattedAmount, currency: symbol, days: `${durationInDays}` }) :
+                this._module.i18n.get('$base_price_ton_per_day', { amount: formattedAmount, currency: symbol });
         }
         async setData(value) {
             this._data = value;
@@ -556,7 +696,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             return scom_social_sdk_1.PaymentMethod.EVM;
         }
         get currency() {
-            return this.productInfo.token?.symbol;
+            return this.token?.symbol;
         }
         get token() {
             return this.productInfo?.token;
@@ -619,7 +759,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                 if (!this._data.discountRules?.length || !duration || !startDate)
                     return;
                 const paymentMethod = this.paymentMethod;
-                const price = eth_wallet_2.Utils.fromDecimals(this.productInfo.price, this.productInfo.token.decimals);
+                const price = eth_wallet_3.Utils.fromDecimals(this.productInfo.price, this.productInfo.token.decimals);
                 const durationInDays = this.productInfo.priceDuration.div(86400);
                 const startTime = startDate.unix();
                 let discountAmount;
@@ -635,7 +775,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                         basePrice = price.times(1 - rule.discountPercentage / 100);
                     }
                     else if (rule.fixedPrice > 0) {
-                        basePrice = new eth_wallet_2.BigNumber(rule.fixedPrice);
+                        basePrice = new eth_wallet_3.BigNumber(rule.fixedPrice);
                     }
                     let tmpDiscountAmount = price.minus(basePrice).div(durationInDays).times(days);
                     if (!this.discountApplied || tmpDiscountAmount.gt(discountAmount)) {
@@ -648,7 +788,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             this._evmWallet = evmWallet;
         }
         registerSendTxEvents(sendTxEventHandlers) {
-            const wallet = eth_wallet_2.Wallet.getClientInstance();
+            const wallet = eth_wallet_3.Wallet.getClientInstance();
             wallet.registerSendTxEvents({
                 transactionHash: (error, receipt) => {
                     if (sendTxEventHandlers.transactionHash) {
@@ -678,21 +818,21 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                 else if (this.discountApplied.fixedPrice > 0) {
                     discountValue = this.discountApplied.fixedPrice;
                     discountType = 'FixedAmount';
-                    basePrice = new eth_wallet_2.BigNumber(this.discountApplied.fixedPrice);
+                    basePrice = new eth_wallet_3.BigNumber(this.discountApplied.fixedPrice);
                 }
                 if (discountType) {
                     const discountAmountRaw = price.minus(basePrice).div(this.productInfo.priceDuration.div(86400)).times(days);
-                    discountAmount = eth_wallet_2.Utils.fromDecimals(discountAmountRaw, this.productInfo.token.decimals);
+                    discountAmount = eth_wallet_3.Utils.fromDecimals(discountAmountRaw, this.productInfo.token.decimals);
                 }
             }
             const pricePerDay = basePrice.div(this.productInfo.priceDuration.div(86400));
             const amountRaw = pricePerDay.times(days);
-            totalAmount = eth_wallet_2.Utils.fromDecimals(amountRaw, this.productInfo.token.decimals);
+            totalAmount = eth_wallet_3.Utils.fromDecimals(amountRaw, this.productInfo.token.decimals);
             return { discountType, discountValue, discountAmount, totalAmount };
         }
         async getTokenInfo(address, chainId) {
             let token;
-            const wallet = eth_wallet_2.Wallet.getClientInstance();
+            const wallet = eth_wallet_3.Wallet.getClientInstance();
             wallet.chainId = chainId;
             const isValidAddress = wallet.isAddress(address);
             if (isValidAddress) {
@@ -738,7 +878,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                 const productMarketplace = new scom_product_contract_1.Contracts.ProductMarketplace(wallet, this._productMarketplaceAddress);
                 const product = await productMarketplace.products(productId);
                 const chainId = wallet.chainId;
-                if (product.token && product.token === eth_wallet_2.Utils.nullAddress) {
+                if (product.token && product.token === eth_wallet_3.Utils.nullAddress) {
                     let net = (0, scom_network_list_2.default)().find(net => net.chainId === chainId);
                     return {
                         ...product,
@@ -767,7 +907,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
         }
         async getDiscount(promotionAddress, productId, productPrice, discountRuleId) {
             let basePrice = productPrice;
-            const wallet = eth_wallet_2.Wallet.getClientInstance();
+            const wallet = eth_wallet_3.Wallet.getClientInstance();
             const promotion = new scom_product_contract_1.Contracts.Promotion(wallet, promotionAddress);
             const index = await promotion.discountRuleIdToIndex({ param1: productId, param2: discountRuleId });
             const rule = await promotion.discountRules({ param1: productId, param2: index });
@@ -788,7 +928,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             };
         }
         async getSubscriptionAction(recipient) {
-            const wallet = eth_wallet_2.Wallet.getClientInstance();
+            const wallet = eth_wallet_3.Wallet.getClientInstance();
             const subscriptionNFT = new scom_product_contract_1.Contracts.SubscriptionNFT(wallet, this.productInfo.nft);
             let nftBalance = await subscriptionNFT.balanceOf(recipient);
             if (nftBalance.eq(0)) {
@@ -801,7 +941,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
         async subscribe(options) {
             const { startTime, duration, recipient, callback, confirmationCallback } = options;
             let commissionAddress = this._evmWallet.getContractAddress('Commission');
-            const wallet = eth_wallet_2.Wallet.getClientInstance();
+            const wallet = eth_wallet_3.Wallet.getClientInstance();
             const commission = new scom_product_contract_1.Contracts.Commission(wallet, commissionAddress);
             const productMarketplace = new scom_product_contract_1.Contracts.ProductMarketplace(wallet, this._productMarketplaceAddress);
             let basePrice = this.productInfo.price;
@@ -819,8 +959,8 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                 let campaign = await commission.getCampaign({ campaignId: this.productId, returnArrays: true });
                 const affiliates = (campaign?.affiliates || []).map(a => a.toLowerCase());
                 if (affiliates.includes(this.referrer.toLowerCase())) {
-                    const commissionRate = eth_wallet_2.Utils.fromDecimals(campaign.commissionRate, 6);
-                    tokenInAmount = new eth_wallet_2.BigNumber(amount).dividedBy(new eth_wallet_2.BigNumber(1).minus(commissionRate)).decimalPlaces(0, eth_wallet_2.BigNumber.ROUND_DOWN);
+                    const commissionRate = eth_wallet_3.Utils.fromDecimals(campaign.commissionRate, 6);
+                    tokenInAmount = new eth_wallet_3.BigNumber(amount).dividedBy(new eth_wallet_3.BigNumber(1).minus(commissionRate)).decimalPlaces(0, eth_wallet_3.BigNumber.ROUND_DOWN);
                 }
             }
             let receipt;
@@ -829,7 +969,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                     transactionHash: callback,
                     confirmation: confirmationCallback
                 });
-                if (this.productInfo.token.address === eth_wallet_2.Utils.nullAddress) {
+                if (this.productInfo.token.address === eth_wallet_3.Utils.nullAddress) {
                     if (!tokenInAmount || tokenInAmount.isZero()) {
                         receipt = await productMarketplace.subscribe({
                             to: recipient || wallet.address,
@@ -890,7 +1030,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
         }
         async renewSubscription(options) {
             const { startTime, duration, recipient, callback, confirmationCallback } = options;
-            const wallet = eth_wallet_2.Wallet.getClientInstance();
+            const wallet = eth_wallet_3.Wallet.getClientInstance();
             const productMarketplace = new scom_product_contract_1.Contracts.ProductMarketplace(wallet, this._productMarketplaceAddress);
             const subscriptionNFT = new scom_product_contract_1.Contracts.SubscriptionNFT(wallet, this.productInfo.nft);
             let nftId = await subscriptionNFT.tokenOfOwnerByIndex({
@@ -913,7 +1053,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                     transactionHash: callback,
                     confirmation: confirmationCallback
                 });
-                if (this.productInfo.token.address === eth_wallet_2.Utils.nullAddress) {
+                if (this.productInfo.token.address === eth_wallet_3.Utils.nullAddress) {
                     receipt = await productMarketplace.renewSubscription({
                         productId: this.productId,
                         nftId: nftId,
@@ -941,7 +1081,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
         }
         getBasePriceLabel() {
             const { token, price, priceDuration } = this.productInfo;
-            const productPrice = eth_wallet_2.Utils.fromDecimals(price, token.decimals).toFixed();
+            const productPrice = eth_wallet_3.Utils.fromDecimals(price, token.decimals).toFixed();
             const days = Math.ceil((priceDuration?.toNumber() || 0) / 86400);
             const formattedAmount = productPrice ? (0, commonUtils_1.formatNumber)(productPrice, 6) : "";
             const symbol = token?.symbol || "";
@@ -1079,7 +1219,7 @@ define("@scom/scom-subscription/translations.json.ts", ["require", "exports"], f
         }
     };
 });
-define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", "@ijstech/eth-wallet", "@scom/scom-social-sdk", "@scom/scom-subscription/index.css.ts", "@scom/scom-subscription/model.ts", "@scom/scom-subscription/evmWallet.ts", "@scom/scom-subscription/tonWallet.ts", "@scom/scom-subscription/commonUtils.ts", "@scom/scom-subscription/translations.json.ts"], function (require, exports, components_6, eth_wallet_3, scom_social_sdk_2, index_css_1, model_1, evmWallet_1, tonWallet_1, commonUtils_2, translations_json_1) {
+define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", "@ijstech/eth-wallet", "@scom/scom-social-sdk", "@scom/scom-subscription/index.css.ts", "@scom/scom-subscription/model.ts", "@scom/scom-subscription/evmWallet.ts", "@scom/scom-subscription/tonWallet.ts", "@scom/scom-subscription/commonUtils.ts", "@scom/scom-subscription/translations.json.ts"], function (require, exports, components_6, eth_wallet_4, scom_social_sdk_2, index_css_1, model_1, evmWallet_1, tonWallet_1, commonUtils_2, translations_json_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     const Theme = components_6.Styles.Theme.ThemeVars;
@@ -1254,7 +1394,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                 spenderAddress: ''
             };
             let wallet = this.evmWallet.getRpcWallet();
-            this.approvalModel = new eth_wallet_3.ERC20ApprovalModel(wallet, approvalOptions);
+            this.approvalModel = new eth_wallet_4.ERC20ApprovalModel(wallet, approvalOptions);
             let approvalModelAction = this.approvalModel.getAction();
             return approvalModelAction;
         }
@@ -1281,7 +1421,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                         this.btnSubmit.visible = true;
                         this.isApproving = false;
                         const duration = Number(this.edtDuration.value) || 0;
-                        this.btnSubmit.enabled = new eth_wallet_3.BigNumber(this.tokenAmountIn).gt(0) && Number.isInteger(duration);
+                        this.btnSubmit.enabled = new eth_wallet_4.BigNumber(this.tokenAmountIn).gt(0) && Number.isInteger(duration);
                         this.determineBtnSubmitCaption();
                     },
                     onApproving: async (token, receipt) => {
@@ -1324,7 +1464,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                     }
                 });
                 this.updateContractAddress();
-                if (this.model?.token?.address !== eth_wallet_3.Utils.nullAddress && this.tokenAmountIn && new eth_wallet_3.BigNumber(this.tokenAmountIn).gt(0)) {
+                if (this.model?.token?.address !== eth_wallet_4.Utils.nullAddress && this.tokenAmountIn && new eth_wallet_4.BigNumber(this.tokenAmountIn).gt(0)) {
                     this.approvalModelAction.checkAllowance(this.model.token, this.tokenAmountIn);
                 }
             }
@@ -1365,7 +1505,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                     this.btnDetail.visible = true;
                     this.lblMarketplaceContract.caption = components_6.FormatUtils.truncateWalletAddress(this.model.productMarketplaceAddress);
                     this.lblNFTContract.caption = components_6.FormatUtils.truncateWalletAddress(tokenAddress);
-                    const isNativeToken = !token.address || token.address === eth_wallet_3.Utils.nullAddress || !token.address.startsWith('0x');
+                    const isNativeToken = !token.address || token.address === eth_wallet_4.Utils.nullAddress || !token.address.startsWith('0x');
                     if (isNativeToken) {
                         const network = this.evmWallet.getNetworkInfo(chainId);
                         this.lblToken.caption = `${network?.chainName || ''} Native Token`;
@@ -1386,7 +1526,9 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                     this.updateSpotsRemaining();
                 }
             }
-            catch (err) { }
+            catch (err) {
+                console.log('error', err);
+            }
         }
         updateSpotsRemaining() {
             if (this.model.productId >= 0) {
@@ -1554,18 +1696,15 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             this.btnDetail.rightIcon.name = isExpanding ? 'caret-down' : 'caret-up';
         }
         onViewMarketplaceContract() {
-            const rpcWallet = this.evmWallet.getRpcWallet();
-            this.evmWallet.viewExplorerByAddress(rpcWallet.chainId, this.model.productMarketplaceAddress || "");
+            this.evmWallet.viewExplorerByAddress(this.model.productMarketplaceAddress || "");
         }
         onViewNFTContract() {
             const { tokenAddress } = this.model.getData();
-            const rpcWallet = this.evmWallet.getRpcWallet();
-            this.evmWallet.viewExplorerByAddress(rpcWallet.chainId, tokenAddress);
+            this.evmWallet.viewExplorerByAddress(tokenAddress);
         }
         onViewToken() {
             const token = this.model.token;
-            const rpcWallet = this.evmWallet.getRpcWallet();
-            this.evmWallet.viewExplorerByAddress(rpcWallet.chainId, token.address || token.symbol);
+            this.evmWallet.viewExplorerByAddress(token.address || token.symbol);
         }
         updateCopyIcon(icon) {
             if (icon.name === 'check')
@@ -1654,8 +1793,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                     return;
                 }
                 if (!this.evmWallet.isNetworkConnected()) {
-                    const rpcWallet = this.evmWallet.getRpcWallet();
-                    await this.evmWallet.switchNetwork(rpcWallet.chainId);
+                    await this.evmWallet.switchNetwork();
                     return;
                 }
                 this.showTxStatusModal('warning', this.i18n.get('$confirming'));

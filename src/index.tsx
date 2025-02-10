@@ -25,7 +25,6 @@ import ScomTxStatusModal from '@scom/scom-tx-status-modal';
 import { inputStyle, linkStyle } from './index.css';
 import { ISubscription } from './interface';
 import { IModel, TonModel, EVMModel } from './model';
-import ScomWalletModal from '@scom/scom-wallet-modal';
 import { EVMWallet } from './evmWallet';
 import { TonWallet } from './tonWallet';
 import { formatNumber, getDurationInDays } from './commonUtils';
@@ -81,7 +80,6 @@ export default class ScomSubscription extends Module {
     private txStatusModal: ScomTxStatusModal;
     private model: IModel;
     private pnlEVMWallet: Panel;
-    private mdEVMWallet: ScomWalletModal;
     private approvalModel: ERC20ApprovalModel;
     private approvalModelAction: IERC20ApprovalAction;
     private isApproving: boolean = false;
@@ -380,7 +378,9 @@ export default class ScomSubscription extends Module {
                 this.iconCopyToken.visible = !isNativeToken;
                 this.updateSpotsRemaining();
             }
-        } catch (err) { }
+        } catch (err) { 
+            console.log('error', err);
+        }
     }
 
     private updateSpotsRemaining() {
@@ -551,20 +551,17 @@ export default class ScomSubscription extends Module {
     }
 
     private onViewMarketplaceContract() {
-        const rpcWallet = this.evmWallet.getRpcWallet();
-        this.evmWallet.viewExplorerByAddress(rpcWallet.chainId, this.model.productMarketplaceAddress || "")
+        this.evmWallet.viewExplorerByAddress(this.model.productMarketplaceAddress || "")
     }
 
     private onViewNFTContract() {
         const { tokenAddress } = this.model.getData();
-        const rpcWallet = this.evmWallet.getRpcWallet();
-        this.evmWallet.viewExplorerByAddress(rpcWallet.chainId, tokenAddress);
+        this.evmWallet.viewExplorerByAddress(tokenAddress);
     }
 
     private onViewToken() {
         const token = this.model.token;
-        const rpcWallet = this.evmWallet.getRpcWallet();
-        this.evmWallet.viewExplorerByAddress(rpcWallet.chainId, token.address || token.symbol);
+        this.evmWallet.viewExplorerByAddress(token.address || token.symbol);
     }
 
     private updateCopyIcon(icon: Icon) {
@@ -672,8 +669,7 @@ export default class ScomSubscription extends Module {
                 return;
             }
             if (!this.evmWallet.isNetworkConnected()) {
-                const rpcWallet = this.evmWallet.getRpcWallet();
-                await this.evmWallet.switchNetwork(rpcWallet.chainId);
+                await this.evmWallet.switchNetwork();
                 return;
             }
             this.showTxStatusModal('warning', this.i18n.get('$confirming'));
