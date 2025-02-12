@@ -622,6 +622,7 @@ export default class ScomSubscription extends Module {
             this.edtStartDate.value = moment();
         }
         const recipient = (this.comboRecipient.selectedItem as IComboItem)?.value;
+        const paymentMethod = this.model.paymentMethod;
         try {
             if (!this.edtStartDate.value) {
                 throw new Error(this.i18n.get('$start_date_required'));
@@ -637,6 +638,8 @@ export default class ScomSubscription extends Module {
             const callback = (error: Error, receipt?: string) => {
                 if (error) {
                     this.showTxStatusModal('error', error);
+                } else if (paymentMethod === PaymentMethod.TON) {
+                    if (this.onSubscribed) this.onSubscribed();
                 }
             };
             const confirmationCallback = async () => {
@@ -680,7 +683,6 @@ export default class ScomSubscription extends Module {
                 return;
             }
             await this.doSubmitAction();
-            if (this.onSubscribed) this.onSubscribed();
         }
     }
 

@@ -1744,6 +1744,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                 this.edtStartDate.value = (0, components_6.moment)();
             }
             const recipient = this.comboRecipient.selectedItem?.value;
+            const paymentMethod = this.model.paymentMethod;
             try {
                 if (!this.edtStartDate.value) {
                     throw new Error(this.i18n.get('$start_date_required'));
@@ -1759,6 +1760,10 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                 const callback = (error, receipt) => {
                     if (error) {
                         this.showTxStatusModal('error', error);
+                    }
+                    else if (paymentMethod === scom_social_sdk_2.PaymentMethod.TON) {
+                        if (this.onSubscribed)
+                            this.onSubscribed();
                     }
                 };
                 const confirmationCallback = async () => {
@@ -1805,8 +1810,6 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                     return;
                 }
                 await this.doSubmitAction();
-                if (this.onSubscribed)
-                    this.onSubscribed();
             }
         }
         init() {
