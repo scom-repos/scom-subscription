@@ -1,4 +1,4 @@
-import { RequireJS } from "@ijstech/components";
+import { RequireJS, application } from "@ijstech/components";
 import { Utils } from "@ijstech/eth-wallet";
 import { ITokenObject } from "@scom/scom-token-list";
 
@@ -11,14 +11,12 @@ export class TonWallet {
     private _isWalletConnected: boolean = false;
     private _onTonWalletStatusChanged: (isConnected: boolean) => void;
     private networkType: NetworkType = 'testnet';
+    protected unsubscribe: () => void;
 
     constructor(
-        moduleDir: string,
         onTonWalletStatusChanged: (isConnected: boolean) => void
     ) {
-        this.loadLib(moduleDir);
         this._onTonWalletStatusChanged = onTonWalletStatusChanged;
-        this.initWallet();
     }
 
     get isWalletConnected() {
@@ -41,8 +39,9 @@ export class TonWallet {
         })
     }
 
-    initWallet() {
+    async initWallet(moduleDir: string) {
         try {
+            await this.loadLib(moduleDir);
             let UI = window['TON_CONNECT_UI'];
             if (!this.tonConnectUI) {
                 this.tonConnectUI = new UI.TonConnectUI({
@@ -54,7 +53,10 @@ export class TonWallet {
                 this._isWalletConnected = this.tonConnectUI.connected;
                 if (this._onTonWalletStatusChanged) this._onTonWalletStatusChanged(this._isWalletConnected);
             });
-            this.tonConnectUI.onStatusChange((walletAndwalletInfo) => {
+            if (this.unsubscribe) {
+                this.unsubscribe();
+            }
+            this.unsubscribe = this.tonConnectUI.onStatusChange((walletAndwalletInfo) => {
                 this._isWalletConnected = !!walletAndwalletInfo;
                 if (this._onTonWalletStatusChanged) this._onTonWalletStatusChanged(this._isWalletConnected);
             });
@@ -70,15 +72,41 @@ export class TonWallet {
         return nonBounceableAddress;
     }
 
-    private getTonCenterAPIEndpoint(): string {
-        switch (this.networkType) {
-            case 'mainnet':
-                return 'https://toncenter.com/api';
-            case 'testnet':
-                return 'https://testnet.toncenter.com/api';
-            default:
-                throw new Error('Unsupported network type');
+    async exponentialBackoffRetry<T>(
+        fn: () => Promise<T>, // Function to retry
+        retries: number, // Maximum number of retries
+        delay: number, // Initial delay duration in milliseconds
+        maxDelay: number, // Maximum delay duration in milliseconds
+        factor: number, // Exponential backoff factor
+        stopCondition: (data: T) => boolean = () => true // Stop condition
+    ): Promise<T> {
+        let currentDelay = delay;
+    
+        for (let i = 0; i < retries; i++) {
+            try {
+                const data = await fn();
+                if (stopCondition(data)) {
+                    return data;
+                }
+                else {
+                    console.log(`Attempt ${i + 1} failed. Retrying in ${currentDelay}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, currentDelay));
+                    currentDelay = Math.min(maxDelay, currentDelay * factor);
+                }
+            } 
+            catch (error) {
+                console.error('error', error);
+                console.log(`Attempt ${i + 1} failed. Retrying in ${currentDelay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, currentDelay));
+                currentDelay = Math.min(maxDelay, currentDelay * factor);
+            }
         }
+        throw new Error(`Failed after ${retries} retries`);
+    }
+
+    private getTonAPIEndpoint(): string {
+        const publicIndexingRelay = application.store?.publicIndexingRelay;
+        return `${publicIndexingRelay}/ton`;
     }
 
     async connectWallet() {
@@ -144,27 +172,132 @@ export class TonWallet {
         return cell.toBoc().toString('base64');
     }
 
+    private async getTonBalance() {
+        try {
+            const address = this.getWalletAddress();
+            const apiEndpoint = this.getTonAPIEndpoint();
+            const func = async () => {
+                const response = await fetch(`${apiEndpoint}/getAddressBalance`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        network: this.networkType,
+                        address: address
+                    })
+                });
+                const result = await response.json();
+                return result;
+            }
+            const stopCondition = (result: any) => {
+                return result?.success;
+            }
+            const result = await this.exponentialBackoffRetry(
+                func,
+                3, 
+                1000, 
+                10000, 
+                2,
+                stopCondition
+            );
+            const balance = result.data?.balance;
+            return balance;
+        } catch (error) {
+            console.error('Error fetching balance:', error);
+            throw error;
+        }
+    }
+
+    async getTokenBalance(token: ITokenObject) {
+        if (!token.address) {
+            return await this.getTonBalance();
+        }
+        const senderJettonAddress = await this.getJettonWalletAddress(token.address, this.getWalletAddress());
+        const apiEndpoint = this.getTonAPIEndpoint();
+        const func = async () => {
+            const response = await fetch(`${apiEndpoint}/runGetMethod`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    network: this.networkType,
+                    params: {
+                        address: senderJettonAddress,
+                        method: 'get_wallet_data',
+                        stack: [],
+                    }
+                })
+            });
+            const result = await response.json();
+            return result;
+        }
+        const stopCondition = (result: any) => {
+            return result?.success;
+        }
+        const result = await this.exponentialBackoffRetry(
+            func,
+            3, 
+            1000, 
+            10000, 
+            2,
+            stopCondition
+        );
+        if (!result.success) {
+            return '0';
+        }
+        const data = result.data;
+        if (data.exit_code !== 0) {
+            return '0';
+        }
+        const balanceStack = data.stack?.[0];
+        const balanceStr: string = balanceStack.value
+        const balance = BigInt(balanceStr).toString();
+        return balance;
+    }
+    
     async getJettonWalletAddress(jettonMasterAddress: string, userAddress: string) {
         const base64Cell = this.buildOwnerSlice(userAddress);
-        const apiEndpoint = this.getTonCenterAPIEndpoint();
-        const url = `${apiEndpoint}/v3/runGetMethod`;
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                address: jettonMasterAddress,
-                method: 'get_wallet_address',
-                stack: [
-                    {
-                        type: 'slice',
-                        value: base64Cell,
-                    },
-                ],
-            })
-        });
-        const data = await response.json();
+        const apiEndpoint = this.getTonAPIEndpoint();
+        const func = async () => {
+            const response = await fetch(`${apiEndpoint}/runGetMethod`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    network: this.networkType,
+                    params: {
+                        address: jettonMasterAddress,
+                        method: 'get_wallet_address',
+                        stack: [
+                            {
+                                type: 'slice',
+                                value: base64Cell,
+                            },
+                        ],
+                    }
+                })
+            });
+            const result = await response.json();
+            return result;
+        }
+        const stopCondition = (result: any) => {
+            return result?.success;
+        }
+        const result = await this.exponentialBackoffRetry(
+            func,
+            3, 
+            1000, 
+            10000, 
+            2,
+            stopCondition
+        );
+        if (!result.success) {
+            throw new Error('Failed to get jetton wallet address');
+        }
+        const data = result.data;
         const cell = this.toncore.Cell.fromBase64(data.stack[0].value);
         const slice = cell.beginParse();
         const address = slice.loadAddress();

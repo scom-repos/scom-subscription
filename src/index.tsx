@@ -86,6 +86,7 @@ export default class ScomSubscription extends Module {
     private tokenAmountIn: string = '0';
     private evmWallet: EVMWallet;
     private tonWallet: TonWallet;
+    private tokenBalance: string;
     public onSubscribed?: () => void;
 
     get durationUnits() {
@@ -159,17 +160,19 @@ export default class ScomSubscription extends Module {
                 defaultChainId: data.defaultChainId
             })
             this.model = new EVMModel(this, this.evmWallet);
+            await this.model.setData(data);
         }
         else {
             if (!this.tonWallet) {
-                this.tonWallet = new TonWallet(moduleDir, this.handleTonWalletStatusChanged.bind(this));
+                this.tonWallet = new TonWallet(this.handleTonWalletStatusChanged.bind(this));
             }
             this.model = new TonModel(this, this.tonWallet);
+            await this.model.setData(data);
+            await this.tonWallet.initWallet(moduleDir);
         }
         this.handleDurationChanged = this.handleDurationChanged.bind(this);
         this.comboDurationUnit.items = this.durationUnits;
         this.comboDurationUnit.selectedItem = this.durationUnits[0];
-        await this.model.setData(data);
         this.showLoading();
         this.edtStartDate.value = undefined;
         this.edtDuration.value = '';
@@ -235,6 +238,7 @@ export default class ScomSubscription extends Module {
 
     private onEVMWalletConnected = async () => {
         if (this.evmWallet.isNetworkConnected()) await this.initApprovalAction();
+        this.tokenBalance = await this.evmWallet.getTokenBalance(this.model.token);
         this.determineBtnSubmitCaption();
     }
 
@@ -413,7 +417,6 @@ export default class ScomSubscription extends Module {
             this.pnlHeader.visible = paymentMethod === PaymentMethod.TON;
             this.pnlRecipient.visible = isEVM;
             this.pnlDetail.visible = isEVM;
-            this.determineBtnSubmitCaption();
             this.chkCustomStartDate.checked = false;
             this.edtStartDate.value = this.isRenewal && this.renewalDate ? moment(this.renewalDate * 1000) : moment();
             this.edtStartDate.enabled = false;
@@ -438,14 +441,16 @@ export default class ScomSubscription extends Module {
                 this.edtDuration.value = durationInDays || "";
                 this.handleDurationChanged();
             }
+            this.determineBtnSubmitCaption();
         } catch (error) { 
             console.log('error', error);
         }
     }
 
-    private handleTonWalletStatusChanged(isConnected: boolean) {
+    private async handleTonWalletStatusChanged(isConnected: boolean) {
         if (isConnected) {
             this.btnSubmit.enabled = this.edtDuration.value && this.duration > 0 && Number.isInteger(this.duration);
+            this.tokenBalance = await this.tonWallet.getTokenBalance(this.model.token);
         } else {
             this.btnSubmit.enabled = true;
         }
@@ -454,6 +459,7 @@ export default class ScomSubscription extends Module {
 
     private determineBtnSubmitCaption() {
         const paymentMethod = this.model.paymentMethod;
+        let isConnected = false;
         if (paymentMethod === PaymentMethod.EVM) {
             if (!this.evmWallet.isWalletConnected()) {
               this.btnSubmit.caption = this.i18n.get('$connect_wallet');
@@ -464,14 +470,27 @@ export default class ScomSubscription extends Module {
               this.btnSubmit.enabled = true;
             }
             else {
-                this.btnSubmit.caption = this.i18n.get(this.isRenewal ? '$renew_subscription' : '$subscribe');
+                isConnected = true;
             }
-        } else {
+        } 
+        else {
             if (!this.tonWallet.isWalletConnected) {
                 this.btnSubmit.caption = this.i18n.get('$connect_wallet');
             }
             else {
+                isConnected = true;
+            }
+        }
+        if (isConnected) {
+            const days = getDurationInDays(this.duration, this.durationUnit, this.edtStartDate.value);
+            const { totalAmount } = this.model.getDiscountAndTotalAmount(days);
+            if (this.tokenBalance && new BigNumber(totalAmount).shiftedBy(this.model.token.decimals).gt(this.tokenBalance)) {
+                this.btnSubmit.caption = this.i18n.get('$insufficient_balance');
+                this.btnSubmit.enabled = false;
+            }
+            else {
                 this.btnSubmit.caption = this.i18n.get(this.isRenewal ? '$renew_subscription' : '$subscribe');
+                this.btnSubmit.enabled = true;
             }
         }
     }
@@ -535,12 +554,14 @@ export default class ScomSubscription extends Module {
         this._updateEndDate();
         this._updateDiscount();
         this._updateTotalAmount();
+        this.determineBtnSubmitCaption();
     }
 
     private handleDurationUnitChanged() {
         this._updateEndDate();
         this._updateDiscount();
         this._updateTotalAmount();
+        this.determineBtnSubmitCaption();
     }
 
     private onToggleDetail() {

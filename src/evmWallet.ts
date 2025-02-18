@@ -4,9 +4,10 @@ import {
     Component
 } from "@ijstech/components";
 import { ContractInfoByChainType, ContractType, IExtendedNetwork, INetworkConfig, IWalletPlugin } from "./interface";
-import { Constants, IEventBusRegistry, INetwork, Wallet } from "@ijstech/eth-wallet";
+import { Constants, Contracts, IEventBusRegistry, INetwork, Utils, Wallet } from "@ijstech/eth-wallet";
 import getNetworkList from "@scom/scom-network-list";
 import configData from './data.json';
+import { ITokenObject } from "@scom/scom-token-list";
 
 class EventEmitter {
     private events: { [key: string]: Function[] } = {};
@@ -221,5 +222,17 @@ export class EVMWallet extends EventEmitter {
             let url = `${network.explorerAddressUrl}${address}`;
             window.open(url);
         }
+    }
+
+    async getTokenBalance(token: ITokenObject) {
+        let balance = '0';
+        const rpcWallet = this.getRpcWallet();
+        if (token.address) {
+            const erc20 = new Contracts.ERC20(rpcWallet, token.address);
+            balance = (await erc20.balanceOf(rpcWallet.address)).toFixed();
+        } else {
+            balance = Utils.toDecimals(await rpcWallet.balance).toFixed();
+        }
+        return balance;
     }
 }
