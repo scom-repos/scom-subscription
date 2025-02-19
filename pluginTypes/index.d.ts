@@ -176,6 +176,18 @@ declare module "@scom/scom-subscription/tonWallet.ts" {
         maxDelay: number, // Maximum delay duration in milliseconds
         factor: number, // Exponential backoff factor
         stopCondition?: (data: T) => boolean): Promise<T>;
+        getNetworkInfo(): {
+            chainId: any;
+            chainName: string;
+            networkCode: string;
+            nativeCurrency: {
+                name: string;
+                symbol: string;
+                decimals: number;
+            };
+            image: string;
+            rpcUrls: any[];
+        };
         private getTonAPIEndpoint;
         connectWallet(): Promise<void>;
         sendTransaction(txData: any): Promise<any>;

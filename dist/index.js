@@ -290,7 +290,7 @@ define("@scom/scom-subscription/evmWallet.ts", ["require", "exports", "@scom/sco
     }
     exports.EVMWallet = EVMWallet;
 });
-define("@scom/scom-subscription/tonWallet.ts", ["require", "exports", "@ijstech/components", "@ijstech/eth-wallet"], function (require, exports, components_4, eth_wallet_2) {
+define("@scom/scom-subscription/tonWallet.ts", ["require", "exports", "@ijstech/components", "@ijstech/eth-wallet", "@scom/scom-token-list"], function (require, exports, components_4, eth_wallet_2, scom_token_list_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.TonWallet = void 0;
@@ -350,7 +350,10 @@ define("@scom/scom-subscription/tonWallet.ts", ["require", "exports", "@ijstech/
         }
         getWalletAddress() {
             const rawAddress = this.tonConnectUI.account?.address;
-            const nonBounceableAddress = this.toncore.Address.parse(rawAddress).toString({ bounceable: false });
+            const nonBounceableAddress = this.toncore.Address.parse(rawAddress).toString({
+                bounceable: false,
+                testOnly: this.networkType === 'testnet'
+            });
             return nonBounceableAddress;
         }
         async exponentialBackoffRetry(fn, // Function to retry
@@ -381,6 +384,27 @@ define("@scom/scom-subscription/tonWallet.ts", ["require", "exports", "@ijstech/
                 }
             }
             throw new Error(`Failed after ${retries} retries`);
+        }
+        getNetworkInfo() {
+            let chainId;
+            if (this.networkType === 'mainnet') {
+                chainId = -239;
+            }
+            else {
+                chainId = -3;
+            }
+            return {
+                chainId: chainId,
+                chainName: this.networkType === 'testnet' ? 'TON Testnet' : 'TON',
+                networkCode: this.networkType === 'testnet' ? 'TON-TESTNET' : 'TON',
+                nativeCurrency: {
+                    name: 'TON',
+                    symbol: 'TON',
+                    decimals: 9
+                },
+                image: scom_token_list_1.assets.fullPath('img/ton.png'),
+                rpcUrls: []
+            };
         }
         getTonAPIEndpoint() {
             const publicIndexingRelay = components_4.application.store?.publicIndexingRelay;
@@ -552,9 +576,11 @@ define("@scom/scom-subscription/tonWallet.ts", ["require", "exports", "@ijstech/
             let result;
             let messageHash;
             try {
+                const networkInfo = this.getNetworkInfo();
                 if (!token.address) {
                     const payload = this.constructPayload(msg);
                     const transaction = {
+                        network: networkInfo.chainId.toString(),
                         validUntil: Math.floor(Date.now() / 1000) + 60,
                         messages: [
                             {
@@ -571,6 +597,7 @@ define("@scom/scom-subscription/tonWallet.ts", ["require", "exports", "@ijstech/
                     const jettonAmount = eth_wallet_2.Utils.toDecimals(amount, token.decimals).toFixed();
                     const payload = this.constructPayloadForTokenTransfer(to, jettonAmount, msg);
                     const transaction = {
+                        network: networkInfo.chainId.toString(),
                         validUntil: Math.floor(Date.now() / 1000) + 60,
                         messages: [
                             {
@@ -597,7 +624,7 @@ define("@scom/scom-subscription/tonWallet.ts", ["require", "exports", "@ijstech/
     }
     exports.TonWallet = TonWallet;
 });
-define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/components", "@scom/scom-network-list", "@scom/scom-social-sdk", "@ijstech/eth-wallet", "@scom/scom-product-contract", "@scom/scom-token-list", "@scom/scom-subscription/commonUtils.ts"], function (require, exports, components_5, scom_network_list_2, scom_social_sdk_1, eth_wallet_3, scom_product_contract_1, scom_token_list_1, commonUtils_1) {
+define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/components", "@scom/scom-network-list", "@scom/scom-social-sdk", "@ijstech/eth-wallet", "@scom/scom-product-contract", "@scom/scom-token-list", "@scom/scom-subscription/commonUtils.ts"], function (require, exports, components_5, scom_network_list_2, scom_social_sdk_1, eth_wallet_3, scom_product_contract_1, scom_token_list_2, commonUtils_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.EVMModel = exports.TonModel = void 0;
@@ -617,7 +644,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             return this._token?.symbol || this._data.currency;
         }
         get token() {
-            const tokenList = scom_token_list_1.tokenStore.getTokenListByNetworkCode('TON-TESTNET');
+            const tokenList = scom_token_list_2.tokenStore.getTokenListByNetworkCode('TON-TESTNET');
             if (this._data.currency === 'TON') {
                 return tokenList.find(token => token.symbol === 'TON');
             }
@@ -801,7 +828,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             this._data = value;
             const { currency, networkCode } = value;
             this._token = networkCode ?
-                scom_token_list_1.tokenStore.getTokenListByNetworkCode(networkCode).find(token => token.symbol === currency || token.address === currency) : null;
+                scom_token_list_2.tokenStore.getTokenListByNetworkCode(networkCode).find(token => token.symbol === currency || token.address === currency) : null;
         }
         getData() {
             return this._data;
@@ -1011,7 +1038,7 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
                         }
                     };
                 }
-                const _tokenList = scom_token_list_1.tokenStore.getTokenList(chainId);
+                const _tokenList = scom_token_list_2.tokenStore.getTokenList(chainId);
                 let token = _tokenList.find(token => product.token && token.address && token.address.toLowerCase() === product.token.toLowerCase());
                 if (!token && product.token) {
                     token = await this.getTokenInfo(product.token, chainId);
