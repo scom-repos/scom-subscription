@@ -1,6 +1,6 @@
 import { RequireJS, application } from "@ijstech/components";
 import { Utils } from "@ijstech/eth-wallet";
-import { ITokenObject } from "@scom/scom-token-list";
+import { assets, ITokenObject } from "@scom/scom-token-list";
 
 const JETTON_TRANSFER_OP = 0xf8a7ea5; // 32-bit
 type NetworkType = 'mainnet' | 'testnet';
@@ -68,7 +68,10 @@ export class TonWallet {
 
     getWalletAddress() {
         const rawAddress = this.tonConnectUI.account?.address;
-        const nonBounceableAddress = this.toncore.Address.parse(rawAddress).toString({ bounceable: false })
+        const nonBounceableAddress = this.toncore.Address.parse(rawAddress).toString({
+            bounceable: false,
+            testOnly: this.networkType === 'testnet'
+        }) 
         return nonBounceableAddress;
     }
 
@@ -104,6 +107,28 @@ export class TonWallet {
         throw new Error(`Failed after ${retries} retries`);
     }
 
+    getNetworkInfo() {
+        let chainId;
+        if (this.networkType === 'mainnet') {
+            chainId = -239;
+        }
+        else {
+            chainId = -3;
+        }
+        return {
+            chainId: chainId,
+            chainName: this.networkType === 'testnet' ? 'TON Testnet' : 'TON',
+            networkCode: this.networkType === 'testnet' ? 'TON-TESTNET' : 'TON',
+            nativeCurrency: {
+                name: 'TON',
+                symbol: 'TON',
+                decimals: 9
+            },
+            image: assets.fullPath('img/ton.png'),
+            rpcUrls: []
+        }
+    }
+    
     private getTonAPIEndpoint(): string {
         const publicIndexingRelay = application.store?.publicIndexingRelay;
         return `${publicIndexingRelay}/ton`;
@@ -318,9 +343,11 @@ export class TonWallet {
         let result: any;
         let messageHash: string;
         try {
+            const networkInfo = this.getNetworkInfo();
             if (!token.address) {
                 const payload = this.constructPayload(msg);
                 const transaction = {
+                    network: networkInfo.chainId.toString(),
                     validUntil: Math.floor(Date.now() / 1000) + 60, // 60 sec
                     messages: [
                         {
@@ -337,6 +364,7 @@ export class TonWallet {
                 const jettonAmount = Utils.toDecimals(amount, token.decimals).toFixed();
                 const payload = this.constructPayloadForTokenTransfer(to, jettonAmount, msg);
                 const transaction = {
+                    network: networkInfo.chainId.toString(),
                     validUntil: Math.floor(Date.now() / 1000) + 60, // 60 sec
                     messages: [
                         {
