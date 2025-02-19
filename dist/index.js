@@ -275,6 +275,18 @@ define("@scom/scom-subscription/evmWallet.ts", ["require", "exports", "@scom/sco
                 window.open(url);
             }
         }
+        async getTokenBalance(token) {
+            let balance = '0';
+            const rpcWallet = this.getRpcWallet();
+            if (token.address) {
+                const erc20 = new eth_wallet_1.Contracts.ERC20(rpcWallet, token.address);
+                balance = (await erc20.balanceOf(rpcWallet.address)).toFixed();
+            }
+            else {
+                balance = eth_wallet_1.Utils.toDecimals(await rpcWallet.balance).toFixed();
+            }
+            return balance;
+        }
     }
     exports.EVMWallet = EVMWallet;
 });
@@ -284,12 +296,10 @@ define("@scom/scom-subscription/tonWallet.ts", ["require", "exports", "@ijstech/
     exports.TonWallet = void 0;
     const JETTON_TRANSFER_OP = 0xf8a7ea5; // 32-bit
     class TonWallet {
-        constructor(moduleDir, onTonWalletStatusChanged) {
+        constructor(onTonWalletStatusChanged) {
             this._isWalletConnected = false;
             this.networkType = 'testnet';
-            this.loadLib(moduleDir);
             this._onTonWalletStatusChanged = onTonWalletStatusChanged;
-            this.initWallet();
         }
         get isWalletConnected() {
             return this._isWalletConnected;
@@ -309,8 +319,9 @@ define("@scom/scom-subscription/tonWallet.ts", ["require", "exports", "@ijstech/
                 });
             });
         }
-        initWallet() {
+        async initWallet(moduleDir) {
             try {
+                await this.loadLib(moduleDir);
                 let UI = window['TON_CONNECT_UI'];
                 if (!this.tonConnectUI) {
                     this.tonConnectUI = new UI.TonConnectUI({
@@ -323,7 +334,10 @@ define("@scom/scom-subscription/tonWallet.ts", ["require", "exports", "@ijstech/
                     if (this._onTonWalletStatusChanged)
                         this._onTonWalletStatusChanged(this._isWalletConnected);
                 });
-                this.tonConnectUI.onStatusChange((walletAndwalletInfo) => {
+                if (this.unsubscribe) {
+                    this.unsubscribe();
+                }
+                this.unsubscribe = this.tonConnectUI.onStatusChange((walletAndwalletInfo) => {
                     this._isWalletConnected = !!walletAndwalletInfo;
                     if (this._onTonWalletStatusChanged)
                         this._onTonWalletStatusChanged(this._isWalletConnected);
@@ -339,15 +353,38 @@ define("@scom/scom-subscription/tonWallet.ts", ["require", "exports", "@ijstech/
             const nonBounceableAddress = this.toncore.Address.parse(rawAddress).toString({ bounceable: false });
             return nonBounceableAddress;
         }
-        getTonCenterAPIEndpoint() {
-            switch (this.networkType) {
-                case 'mainnet':
-                    return 'https://toncenter.com/api';
-                case 'testnet':
-                    return 'https://testnet.toncenter.com/api';
-                default:
-                    throw new Error('Unsupported network type');
+        async exponentialBackoffRetry(fn, // Function to retry
+        retries, // Maximum number of retries
+        delay, // Initial delay duration in milliseconds
+        maxDelay, // Maximum delay duration in milliseconds
+        factor, // Exponential backoff factor
+        stopCondition = () => true // Stop condition
+        ) {
+            let currentDelay = delay;
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const data = await fn();
+                    if (stopCondition(data)) {
+                        return data;
+                    }
+                    else {
+                        console.log(`Attempt ${i + 1} failed. Retrying in ${currentDelay}ms...`);
+                        await new Promise(resolve => setTimeout(resolve, currentDelay));
+                        currentDelay = Math.min(maxDelay, currentDelay * factor);
+                    }
+                }
+                catch (error) {
+                    console.error('error', error);
+                    console.log(`Attempt ${i + 1} failed. Retrying in ${currentDelay}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, currentDelay));
+                    currentDelay = Math.min(maxDelay, currentDelay * factor);
+                }
             }
+            throw new Error(`Failed after ${retries} retries`);
+        }
+        getTonAPIEndpoint() {
+            const publicIndexingRelay = components_4.application.store?.publicIndexingRelay;
+            return `${publicIndexingRelay}/ton`;
         }
         async connectWallet() {
             try {
@@ -399,27 +436,110 @@ define("@scom/scom-subscription/tonWallet.ts", ["require", "exports", "@ijstech/
                 .endCell();
             return cell.toBoc().toString('base64');
         }
+        async getTonBalance() {
+            try {
+                const address = this.getWalletAddress();
+                const apiEndpoint = this.getTonAPIEndpoint();
+                const func = async () => {
+                    const response = await fetch(`${apiEndpoint}/getAddressBalance`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            network: this.networkType,
+                            address: address
+                        })
+                    });
+                    const result = await response.json();
+                    return result;
+                };
+                const stopCondition = (result) => {
+                    return result?.success;
+                };
+                const result = await this.exponentialBackoffRetry(func, 3, 1000, 10000, 2, stopCondition);
+                const balance = result.data?.balance;
+                return balance;
+            }
+            catch (error) {
+                console.error('Error fetching balance:', error);
+                throw error;
+            }
+        }
+        async getTokenBalance(token) {
+            if (!token.address) {
+                return await this.getTonBalance();
+            }
+            const senderJettonAddress = await this.getJettonWalletAddress(token.address, this.getWalletAddress());
+            const apiEndpoint = this.getTonAPIEndpoint();
+            const func = async () => {
+                const response = await fetch(`${apiEndpoint}/runGetMethod`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        network: this.networkType,
+                        params: {
+                            address: senderJettonAddress,
+                            method: 'get_wallet_data',
+                            stack: [],
+                        }
+                    })
+                });
+                const result = await response.json();
+                return result;
+            };
+            const stopCondition = (result) => {
+                return result?.success;
+            };
+            const result = await this.exponentialBackoffRetry(func, 3, 1000, 10000, 2, stopCondition);
+            if (!result.success) {
+                return '0';
+            }
+            const data = result.data;
+            if (data.exit_code !== 0) {
+                return '0';
+            }
+            const balanceStack = data.stack?.[0];
+            const balanceStr = balanceStack.value;
+            const balance = BigInt(balanceStr).toString();
+            return balance;
+        }
         async getJettonWalletAddress(jettonMasterAddress, userAddress) {
             const base64Cell = this.buildOwnerSlice(userAddress);
-            const apiEndpoint = this.getTonCenterAPIEndpoint();
-            const url = `${apiEndpoint}/v3/runGetMethod`;
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    address: jettonMasterAddress,
-                    method: 'get_wallet_address',
-                    stack: [
-                        {
-                            type: 'slice',
-                            value: base64Cell,
-                        },
-                    ],
-                })
-            });
-            const data = await response.json();
+            const apiEndpoint = this.getTonAPIEndpoint();
+            const func = async () => {
+                const response = await fetch(`${apiEndpoint}/runGetMethod`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        network: this.networkType,
+                        params: {
+                            address: jettonMasterAddress,
+                            method: 'get_wallet_address',
+                            stack: [
+                                {
+                                    type: 'slice',
+                                    value: base64Cell,
+                                },
+                            ],
+                        }
+                    })
+                });
+                const result = await response.json();
+                return result;
+            };
+            const stopCondition = (result) => {
+                return result?.success;
+            };
+            const result = await this.exponentialBackoffRetry(func, 3, 1000, 10000, 2, stopCondition);
+            if (!result.success) {
+                throw new Error('Failed to get jetton wallet address');
+            }
+            const data = result.data;
             const cell = this.toncore.Cell.fromBase64(data.stack[0].value);
             const slice = cell.beginParse();
             const address = slice.loadAddress();
@@ -1114,6 +1234,7 @@ define("@scom/scom-subscription/translations.json.ts", ["require", "exports"], f
             "hurry_only_remaining_nfts_left": "🔥Hurry! Only [ {{remaining}} NFTs Left ]🔥",
             "connect_wallet": "Connect Wallet",
             "switch_network": "Switch Network",
+            "insufficient_balance": "Insufficient Balance",
             "subscribe": "Subscribe",
             "renew_subscription": "Renew Subscription",
             "discount": "Discount",
@@ -1152,6 +1273,7 @@ define("@scom/scom-subscription/translations.json.ts", ["require", "exports"], f
             "hurry_only_remaining_nfts_left": "🔥快點！只剩 [ {{remaining}} 個 NFTs ]🔥",
             "connect_wallet": "連接錢包",
             "switch_network": "切換網絡",
+            "insufficient_balance": "餘額不足",
             "subscribe": "訂閱",
             "renew_subscription": "續訂",
             "discount": "折扣",
@@ -1190,6 +1312,7 @@ define("@scom/scom-subscription/translations.json.ts", ["require", "exports"], f
             "hurry_only_remaining_nfts_left": "🔥Nhanh lên! Chỉ còn [ {{remaining}} NFTs ]🔥",
             "connect_wallet": "Kết nối ví",
             "switch_network": "Chuyển mạng",
+            "insufficient_balance": "Số dư không đủ",
             "subscribe": "Đăng ký",
             "renew_subscription": "Gia hạn đăng ký",
             "discount": "Giảm giá",
@@ -1232,6 +1355,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             this.onEVMWalletConnected = async () => {
                 if (this.evmWallet.isNetworkConnected())
                     await this.initApprovalAction();
+                this.tokenBalance = await this.evmWallet.getTokenBalance(this.model.token);
                 this.determineBtnSubmitCaption();
             };
             this.refreshDappContainer = (data) => {
@@ -1319,17 +1443,19 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                     defaultChainId: data.defaultChainId
                 });
                 this.model = new model_1.EVMModel(this, this.evmWallet);
+                await this.model.setData(data);
             }
             else {
                 if (!this.tonWallet) {
-                    this.tonWallet = new tonWallet_1.TonWallet(moduleDir, this.handleTonWalletStatusChanged.bind(this));
+                    this.tonWallet = new tonWallet_1.TonWallet(this.handleTonWalletStatusChanged.bind(this));
                 }
                 this.model = new model_1.TonModel(this, this.tonWallet);
+                await this.model.setData(data);
+                await this.tonWallet.initWallet(moduleDir);
             }
             this.handleDurationChanged = this.handleDurationChanged.bind(this);
             this.comboDurationUnit.items = this.durationUnits;
             this.comboDurationUnit.selectedItem = this.durationUnits[0];
-            await this.model.setData(data);
             this.showLoading();
             this.edtStartDate.value = undefined;
             this.edtDuration.value = '';
@@ -1562,7 +1688,6 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                 this.pnlHeader.visible = paymentMethod === scom_social_sdk_2.PaymentMethod.TON;
                 this.pnlRecipient.visible = isEVM;
                 this.pnlDetail.visible = isEVM;
-                this.determineBtnSubmitCaption();
                 this.chkCustomStartDate.checked = false;
                 this.edtStartDate.value = this.isRenewal && this.renewalDate ? (0, components_6.moment)(this.renewalDate * 1000) : (0, components_6.moment)();
                 this.edtStartDate.enabled = false;
@@ -1589,14 +1714,16 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                     this.edtDuration.value = durationInDays || "";
                     this.handleDurationChanged();
                 }
+                this.determineBtnSubmitCaption();
             }
             catch (error) {
                 console.log('error', error);
             }
         }
-        handleTonWalletStatusChanged(isConnected) {
+        async handleTonWalletStatusChanged(isConnected) {
             if (isConnected) {
                 this.btnSubmit.enabled = this.edtDuration.value && this.duration > 0 && Number.isInteger(this.duration);
+                this.tokenBalance = await this.tonWallet.getTokenBalance(this.model.token);
             }
             else {
                 this.btnSubmit.enabled = true;
@@ -1605,6 +1732,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
         }
         determineBtnSubmitCaption() {
             const paymentMethod = this.model.paymentMethod;
+            let isConnected = false;
             if (paymentMethod === scom_social_sdk_2.PaymentMethod.EVM) {
                 if (!this.evmWallet.isWalletConnected()) {
                     this.btnSubmit.caption = this.i18n.get('$connect_wallet');
@@ -1615,7 +1743,7 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                     this.btnSubmit.enabled = true;
                 }
                 else {
-                    this.btnSubmit.caption = this.i18n.get(this.isRenewal ? '$renew_subscription' : '$subscribe');
+                    isConnected = true;
                 }
             }
             else {
@@ -1623,7 +1751,19 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                     this.btnSubmit.caption = this.i18n.get('$connect_wallet');
                 }
                 else {
+                    isConnected = true;
+                }
+            }
+            if (isConnected) {
+                const days = (0, commonUtils_2.getDurationInDays)(this.duration, this.durationUnit, this.edtStartDate.value);
+                const { totalAmount } = this.model.getDiscountAndTotalAmount(days);
+                if (this.tokenBalance && new eth_wallet_4.BigNumber(totalAmount).shiftedBy(this.model.token.decimals).gt(this.tokenBalance)) {
+                    this.btnSubmit.caption = this.i18n.get('$insufficient_balance');
+                    this.btnSubmit.enabled = false;
+                }
+                else {
                     this.btnSubmit.caption = this.i18n.get(this.isRenewal ? '$renew_subscription' : '$subscribe');
+                    this.btnSubmit.enabled = true;
                 }
             }
         }
@@ -1683,11 +1823,13 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
             this._updateEndDate();
             this._updateDiscount();
             this._updateTotalAmount();
+            this.determineBtnSubmitCaption();
         }
         handleDurationUnitChanged() {
             this._updateEndDate();
             this._updateDiscount();
             this._updateTotalAmount();
+            this.determineBtnSubmitCaption();
         }
         onToggleDetail() {
             const isExpanding = this.detailWrapper.visible;

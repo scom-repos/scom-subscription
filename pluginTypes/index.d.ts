@@ -107,6 +107,7 @@ declare module "@scom/scom-subscription/data.json.ts" {
 declare module "@scom/scom-subscription/evmWallet.ts" {
     import { Component } from "@ijstech/components";
     import { ContractType, IExtendedNetwork, INetworkConfig, IWalletPlugin } from "@scom/scom-subscription/interface.ts";
+    import { ITokenObject } from "@scom/scom-token-list";
     class EventEmitter {
         private events;
         on(event: string, listener: Function): void;
@@ -151,6 +152,7 @@ declare module "@scom/scom-subscription/evmWallet.ts" {
         switchNetwork(): Promise<void>;
         getNetworkInfo(chainId: number): IExtendedNetwork;
         viewExplorerByAddress(address: string): void;
+        getTokenBalance(token: ITokenObject): Promise<string>;
     }
 }
 /// <amd-module name="@scom/scom-subscription/tonWallet.ts" />
@@ -162,18 +164,27 @@ declare module "@scom/scom-subscription/tonWallet.ts" {
         private _isWalletConnected;
         private _onTonWalletStatusChanged;
         private networkType;
-        constructor(moduleDir: string, onTonWalletStatusChanged: (isConnected: boolean) => void);
+        protected unsubscribe: () => void;
+        constructor(onTonWalletStatusChanged: (isConnected: boolean) => void);
         get isWalletConnected(): boolean;
         loadLib(moduleDir: string): Promise<unknown>;
-        initWallet(): void;
+        initWallet(moduleDir: string): Promise<void>;
         getWalletAddress(): any;
-        private getTonCenterAPIEndpoint;
+        exponentialBackoffRetry<T>(fn: () => Promise<T>, // Function to retry
+        retries: number, // Maximum number of retries
+        delay: number, // Initial delay duration in milliseconds
+        maxDelay: number, // Maximum delay duration in milliseconds
+        factor: number, // Exponential backoff factor
+        stopCondition?: (data: T) => boolean): Promise<T>;
+        private getTonAPIEndpoint;
         connectWallet(): Promise<void>;
         sendTransaction(txData: any): Promise<any>;
         constructPayload(msg: string): any;
         constructPayloadForTokenTransfer(to: string, amount: string, msg: string): string;
         getTransactionMessageHash(boc: string): any;
         buildOwnerSlice(userAddress: string): string;
+        private getTonBalance;
+        getTokenBalance(token: ITokenObject): Promise<any>;
         getJettonWalletAddress(jettonMasterAddress: string, userAddress: string): Promise<string>;
         transferToken(to: string, token: ITokenObject, amount: string, msg: string, callback?: (error: Error, receipt?: string) => Promise<void>, confirmationCallback?: (receipt: any) => Promise<void>): Promise<string>;
     }
@@ -361,6 +372,7 @@ declare module "@scom/scom-subscription/translations.json.ts" {
             hurry_only_remaining_nfts_left: string;
             connect_wallet: string;
             switch_network: string;
+            insufficient_balance: string;
             subscribe: string;
             renew_subscription: string;
             discount: string;
@@ -399,6 +411,7 @@ declare module "@scom/scom-subscription/translations.json.ts" {
             hurry_only_remaining_nfts_left: string;
             connect_wallet: string;
             switch_network: string;
+            insufficient_balance: string;
             subscribe: string;
             renew_subscription: string;
             discount: string;
@@ -437,6 +450,7 @@ declare module "@scom/scom-subscription/translations.json.ts" {
             hurry_only_remaining_nfts_left: string;
             connect_wallet: string;
             switch_network: string;
+            insufficient_balance: string;
             subscribe: string;
             renew_subscription: string;
             discount: string;
@@ -522,6 +536,7 @@ declare module "@scom/scom-subscription" {
         private tokenAmountIn;
         private evmWallet;
         private tonWallet;
+        private tokenBalance;
         onSubscribed?: () => void;
         get durationUnits(): {
             label: string;
