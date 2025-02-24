@@ -304,6 +304,14 @@ define("@scom/scom-subscription/tonWallet.ts", ["require", "exports", "@ijstech/
         get isWalletConnected() {
             return this._isWalletConnected;
         }
+        isNetworkConnected() {
+            if (this.tonConnectUI.connected) {
+                const currentChainId = this.tonConnectUI.account?.chain;
+                const networkInfo = this.getNetworkInfo();
+                return currentChainId === networkInfo.chainId.toString();
+            }
+            return false;
+        }
         async loadLib(moduleDir) {
             let self = this;
             return new Promise((resolve, reject) => {
@@ -337,8 +345,9 @@ define("@scom/scom-subscription/tonWallet.ts", ["require", "exports", "@ijstech/
                 if (this.unsubscribe) {
                     this.unsubscribe();
                 }
-                this.unsubscribe = this.tonConnectUI.onStatusChange((walletAndwalletInfo) => {
+                this.unsubscribe = this.tonConnectUI.onStatusChange(async (walletAndwalletInfo) => {
                     this._isWalletConnected = !!walletAndwalletInfo;
+                    await this.switchNetwork();
                     if (this._onTonWalletStatusChanged)
                         this._onTonWalletStatusChanged(this._isWalletConnected);
                 });
@@ -384,6 +393,18 @@ define("@scom/scom-subscription/tonWallet.ts", ["require", "exports", "@ijstech/
                 }
             }
             throw new Error(`Failed after ${retries} retries`);
+        }
+        async switchNetwork() {
+            const account = this.tonConnectUI?.account;
+            if (!account) {
+                return;
+            }
+            if (account.chain === '-239') {
+                this.networkType = 'mainnet';
+            }
+            else {
+                this.networkType = 'testnet';
+            }
         }
         getNetworkInfo() {
             let chainId;
@@ -738,6 +759,10 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             this._module = module;
             this.tonWallet = tonWallet;
         }
+        isNetworkSupported() {
+            const networkInfo = this.tonWallet.getNetworkInfo();
+            return this._data.networkCode === networkInfo.networkCode;
+        }
         getDiscountAndTotalAmount(days) {
             let discountType;
             let discountValue;
@@ -933,6 +958,9 @@ define("@scom/scom-subscription/model.ts", ["require", "exports", "@ijstech/comp
             };
             this._module = module;
             this._evmWallet = evmWallet;
+        }
+        isNetworkSupported() {
+            return true;
         }
         registerSendTxEvents(sendTxEventHandlers) {
             const wallet = eth_wallet_3.Wallet.getClientInstance();
@@ -1288,6 +1316,7 @@ define("@scom/scom-subscription/translations.json.ts", ["require", "exports"], f
             "base_price_ton_per_day": "{{amount}} {{currency}} per day",
             "base_price_evm_duration_in_days": "{{amount}} {{symbol}} for {{days}} days",
             "base_price_evm_per_day": "{{amount}} {{symbol}} per day",
+            "network_not_supported": "Network not supported"
         },
         "zh-hant": {
             "day(s)": "天",
@@ -1326,7 +1355,8 @@ define("@scom/scom-subscription/translations.json.ts", ["require", "exports"], f
             "base_price_ton_duration_in_days": "{{amount}} {{currency}} 為期 {{days}} 天",
             "base_price_ton_per_day": "{{amount}} {{currency}} 每天",
             "base_price_evm_duration_in_days": "{{amount}} {{symbol}} 為期 {{days}} 天",
-            "base_price_evm_per_day": "{{amount}} {{symbol}} 每天"
+            "base_price_evm_per_day": "{{amount}} {{symbol}} 每天",
+            "network_not_supported": "網絡不受支持"
         },
         "vi": {
             "day(s)": "Ngày",
@@ -1365,7 +1395,8 @@ define("@scom/scom-subscription/translations.json.ts", ["require", "exports"], f
             "base_price_ton_duration_in_days": "{{amount}} {{currency}} cho {{days}} ngày",
             "base_price_ton_per_day": "{{amount}} {{currency}} mỗi ngày",
             "base_price_evm_duration_in_days": "{{amount}} {{symbol}} cho {{days}} ngày",
-            "base_price_evm_per_day": "{{amount}} {{symbol}} mỗi ngày"
+            "base_price_evm_per_day": "{{amount}} {{symbol}} mỗi ngày",
+            "network_not_supported": "Mạng không được hỗ trợ"
         }
     };
 });
@@ -1782,15 +1813,21 @@ define("@scom/scom-subscription", ["require", "exports", "@ijstech/components", 
                 }
             }
             if (isConnected) {
-                const days = (0, commonUtils_2.getDurationInDays)(this.duration, this.durationUnit, this.edtStartDate.value);
-                const { totalAmount } = this.model.getDiscountAndTotalAmount(days);
-                if (this.tokenBalance && new eth_wallet_4.BigNumber(totalAmount).shiftedBy(this.model.token.decimals).gt(this.tokenBalance)) {
-                    this.btnSubmit.caption = this.i18n.get('$insufficient_balance');
+                if (!this.model.isNetworkSupported()) {
+                    this.btnSubmit.caption = this.i18n.get('$network_not_supported');
                     this.btnSubmit.enabled = false;
                 }
                 else {
-                    this.btnSubmit.caption = this.i18n.get(this.isRenewal ? '$renew_subscription' : '$subscribe');
-                    this.btnSubmit.enabled = true;
+                    const days = (0, commonUtils_2.getDurationInDays)(this.duration, this.durationUnit, this.edtStartDate.value);
+                    const { totalAmount } = this.model.getDiscountAndTotalAmount(days);
+                    if (this.tokenBalance && new eth_wallet_4.BigNumber(totalAmount).shiftedBy(this.model.token.decimals).gt(this.tokenBalance)) {
+                        this.btnSubmit.caption = this.i18n.get('$insufficient_balance');
+                        this.btnSubmit.enabled = false;
+                    }
+                    else {
+                        this.btnSubmit.caption = this.i18n.get(this.isRenewal ? '$renew_subscription' : '$subscribe');
+                        this.btnSubmit.enabled = true;
+                    }
                 }
             }
         }

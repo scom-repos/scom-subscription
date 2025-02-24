@@ -482,15 +482,21 @@ export default class ScomSubscription extends Module {
             }
         }
         if (isConnected) {
-            const days = getDurationInDays(this.duration, this.durationUnit, this.edtStartDate.value);
-            const { totalAmount } = this.model.getDiscountAndTotalAmount(days);
-            if (this.tokenBalance && new BigNumber(totalAmount).shiftedBy(this.model.token.decimals).gt(this.tokenBalance)) {
-                this.btnSubmit.caption = this.i18n.get('$insufficient_balance');
+            if (!this.model.isNetworkSupported()) {
+                this.btnSubmit.caption = this.i18n.get('$network_not_supported');
                 this.btnSubmit.enabled = false;
             }
             else {
-                this.btnSubmit.caption = this.i18n.get(this.isRenewal ? '$renew_subscription' : '$subscribe');
-                this.btnSubmit.enabled = true;
+                const days = getDurationInDays(this.duration, this.durationUnit, this.edtStartDate.value);
+                const { totalAmount } = this.model.getDiscountAndTotalAmount(days);
+                if (this.tokenBalance && new BigNumber(totalAmount).shiftedBy(this.model.token.decimals).gt(this.tokenBalance)) {
+                    this.btnSubmit.caption = this.i18n.get('$insufficient_balance');
+                    this.btnSubmit.enabled = false;
+                }
+                else {
+                    this.btnSubmit.caption = this.i18n.get(this.isRenewal ? '$renew_subscription' : '$subscribe');
+                    this.btnSubmit.enabled = true;
+                }
             }
         }
     }

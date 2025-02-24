@@ -130,6 +130,11 @@ export class TonModel implements IModel {
         this.tonWallet = tonWallet;
     }
 
+    isNetworkSupported() {
+        const networkInfo = this.tonWallet.getNetworkInfo();
+        return this._data.networkCode === networkInfo.networkCode;
+    }
+    
     updateDiscount = (duration: number, startDate: any, days: number) => {
         this.discountApplied = undefined;
         if (!this._data.discountRules?.length || !duration || !startDate) return;
@@ -373,6 +378,10 @@ export class EVMModel implements IModel {
     constructor(module: Module, evmWallet: EVMWallet) {
         this._module = module;
         this._evmWallet = evmWallet;
+    }
+
+    isNetworkSupported() {
+        return true;
     }
 
     registerSendTxEvents(sendTxEventHandlers: ISendTxEventsOptions) {
@@ -730,4 +739,5 @@ export interface IModel {
     getPaymentTransactionData(startTime: number, endTime: number, days: number): any;
     updateDiscount(duration: number, startDate: any, days: number): void;
     getBasePriceLabel(): string;
+    isNetworkSupported(): boolean;
 }

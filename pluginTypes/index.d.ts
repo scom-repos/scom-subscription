@@ -167,6 +167,7 @@ declare module "@scom/scom-subscription/tonWallet.ts" {
         protected unsubscribe: () => void;
         constructor(onTonWalletStatusChanged: (isConnected: boolean) => void);
         get isWalletConnected(): boolean;
+        isNetworkConnected(): boolean;
         loadLib(moduleDir: string): Promise<unknown>;
         initWallet(moduleDir: string): Promise<void>;
         getWalletAddress(): any;
@@ -176,6 +177,7 @@ declare module "@scom/scom-subscription/tonWallet.ts" {
         maxDelay: number, // Maximum delay duration in milliseconds
         factor: number, // Exponential backoff factor
         stopCondition?: (data: T) => boolean): Promise<T>;
+        switchNetwork(): Promise<void>;
         getNetworkInfo(): {
             chainId: any;
             chainName: string;
@@ -250,6 +252,7 @@ declare module "@scom/scom-subscription/model.ts" {
         get dataManager(): SocialDataManager;
         set dataManager(manager: SocialDataManager);
         constructor(module: Module, tonWallet: TonWallet);
+        isNetworkSupported(): boolean;
         updateDiscount: (duration: number, startDate: any, days: number) => void;
         getDiscountAndTotalAmount(days: number): {
             discountType: "Percentage" | "FixedAmount";
@@ -305,6 +308,7 @@ declare module "@scom/scom-subscription/model.ts" {
         get dataManager(): SocialDataManager;
         set dataManager(manager: SocialDataManager);
         constructor(module: Module, evmWallet: EVMWallet);
+        isNetworkSupported(): boolean;
         registerSendTxEvents(sendTxEventHandlers: ISendTxEventsOptions): void;
         updateDiscount: (duration: number, startDate: any, days: number) => void;
         getDiscountAndTotalAmount(days: number): {
@@ -368,6 +372,7 @@ declare module "@scom/scom-subscription/model.ts" {
         getPaymentTransactionData(startTime: number, endTime: number, days: number): any;
         updateDiscount(duration: number, startDate: any, days: number): void;
         getBasePriceLabel(): string;
+        isNetworkSupported(): boolean;
     }
 }
 /// <amd-module name="@scom/scom-subscription/translations.json.ts" />
@@ -411,6 +416,7 @@ declare module "@scom/scom-subscription/translations.json.ts" {
             base_price_ton_per_day: string;
             base_price_evm_duration_in_days: string;
             base_price_evm_per_day: string;
+            network_not_supported: string;
         };
         "zh-hant": {
             "day(s)": string;
@@ -450,6 +456,7 @@ declare module "@scom/scom-subscription/translations.json.ts" {
             base_price_ton_per_day: string;
             base_price_evm_duration_in_days: string;
             base_price_evm_per_day: string;
+            network_not_supported: string;
         };
         vi: {
             "day(s)": string;
@@ -489,6 +496,7 @@ declare module "@scom/scom-subscription/translations.json.ts" {
             base_price_ton_per_day: string;
             base_price_evm_duration_in_days: string;
             base_price_evm_per_day: string;
+            network_not_supported: string;
         };
     };
     export default _default_1;

@@ -23,6 +23,15 @@ export class TonWallet {
         return this._isWalletConnected;
     }
 
+    isNetworkConnected() {
+        if (this.tonConnectUI.connected) {
+            const currentChainId = this.tonConnectUI.account?.chain;
+            const networkInfo = this.getNetworkInfo();
+            return currentChainId === networkInfo.chainId.toString();
+        }
+        return false;
+    }
+
     async loadLib(moduleDir: string) {
         let self = this;
         return new Promise((resolve, reject) => {
@@ -56,8 +65,9 @@ export class TonWallet {
             if (this.unsubscribe) {
                 this.unsubscribe();
             }
-            this.unsubscribe = this.tonConnectUI.onStatusChange((walletAndwalletInfo) => {
+            this.unsubscribe = this.tonConnectUI.onStatusChange(async (walletAndwalletInfo) => {
                 this._isWalletConnected = !!walletAndwalletInfo;
+                await this.switchNetwork();
                 if (this._onTonWalletStatusChanged) this._onTonWalletStatusChanged(this._isWalletConnected);
             });
         } catch (err) {
@@ -105,6 +115,19 @@ export class TonWallet {
             }
         }
         throw new Error(`Failed after ${retries} retries`);
+    }
+
+    async switchNetwork() {
+        const account = this.tonConnectUI?.account;
+        if (!account) {
+            return;
+        }
+        if (account.chain === '-239') {
+            this.networkType = 'mainnet';
+        }
+        else {
+            this.networkType = 'testnet';
+        }
     }
 
     getNetworkInfo() {
