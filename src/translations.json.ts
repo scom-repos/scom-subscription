@@ -37,6 +37,7 @@ export default {
     "base_price_ton_per_day": "{{amount}} {{currency}} per day",
     "base_price_evm_duration_in_days": "{{amount}} {{symbol}} for {{days}} days",
     "base_price_evm_per_day": "{{amount}} {{symbol}} per day",
+    "network_not_supported": "Network not supported"
   },
   "zh-hant": {
     "day(s)": "天",
@@ -75,7 +76,8 @@ export default {
     "base_price_ton_duration_in_days": "{{amount}} {{currency}} 為期 {{days}} 天",
     "base_price_ton_per_day": "{{amount}} {{currency}} 每天",
     "base_price_evm_duration_in_days": "{{amount}} {{symbol}} 為期 {{days}} 天",
-    "base_price_evm_per_day": "{{amount}} {{symbol}} 每天"
+    "base_price_evm_per_day": "{{amount}} {{symbol}} 每天",
+    "network_not_supported": "網絡不受支持"
   },
   "vi": {
     "day(s)": "Ngày",
@@ -114,6 +116,7 @@ export default {
     "base_price_ton_duration_in_days": "{{amount}} {{currency}} cho {{days}} ngày",
     "base_price_ton_per_day": "{{amount}} {{currency}} mỗi ngày",
     "base_price_evm_duration_in_days": "{{amount}} {{symbol}} cho {{days}} ngày",
-    "base_price_evm_per_day": "{{amount}} {{symbol}} mỗi ngày"
+    "base_price_evm_per_day": "{{amount}} {{symbol}} mỗi ngày",
+    "network_not_supported": "Mạng không được hỗ trợ"
   }
 }
